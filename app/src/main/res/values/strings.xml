@@ -56,6 +56,8 @@
     <string name="setting_otp_desc">A text with a verification code opens a card with the code and a Copy button.</string>
     <string name="setting_otp_copy">Copy codes automatically</string>
     <string name="setting_otp_copy_desc">Put the code on the clipboard as soon as the card appears (replaces what you copied before).</string>
+    <string name="setting_incoming_call_card">Show incoming call card</string>
+    <string name="setting_incoming_call_card_desc">Show Dynamic Island\'s incoming-call card while the phone is ringing. When disabled, Samsung\'s native incoming-call interface is used instead. Ongoing calls still appear in Dynamic Island.</string>
     <string name="setting_calls">Voice-chat calls</string>
     <string name="setting_calls_desc">Voice-chat and VoIP calls get a card with the timer and an end button.</string>
     <string name="restart_systemui">Restart System UI</string>

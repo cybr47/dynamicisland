@@ -17,6 +17,7 @@ import dev.android.dynamicisland.island.IslandText;
 import dev.android.dynamicisland.island.graphics.Colors;
 import dev.android.dynamicisland.island.graphics.Glyphs;
 import dev.android.dynamicisland.island.model.IslandItem;
+import dev.android.dynamicisland.settings.ModuleSettings;
 import dev.android.dynamicisland.xposed.Refl;
 import dev.android.dynamicisland.xposed.XLog;
 import java.util.Arrays;
@@ -79,6 +80,9 @@ final class CallCardBuilder {
         String pkg = (String) Refl.get(info, "packageName");
         if (pkg == null) {
             pkg = packageOfKey(key); // One UI 7 does not keep the package on the call info
+        }
+        if (isRinging(info, pkg) && !ModuleSettings.showIncomingCallCard()) {
+            return;
         }
         if (pkg != null) {
             packages.add(pkg);

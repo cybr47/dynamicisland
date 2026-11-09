@@ -45,7 +45,7 @@ public final class IncomingCallSource {
         IslandItem item = safelyBuild(notification);
         if (item == null) { if (notification != null) items.remove(notification.getKey()); return false; }
         items.put(item.sourceKey, item);
-        return true;
+        return enabled(item);
     }
 
     private IslandItem safelyBuild(StatusBarNotification notification) {
@@ -53,7 +53,10 @@ public final class IncomingCallSource {
         catch (RuntimeException error) { XLog.once("incoming call notification", error); return null; }
     }
 
-    public IslandItem item(String notificationKey) { return items.get(notificationKey); }
+    public IslandItem item(String notificationKey) {
+        IslandItem item = items.get(notificationKey);
+        return item != null && enabled(item) ? item : null;
+    }
     public Set<String> activeKeys() {
         if (items.isEmpty()) return Set.of();
         Set<String> keys = new java.util.HashSet<>();
@@ -61,7 +64,9 @@ public final class IncomingCallSource {
         return keys;
     }
     private static boolean nativeCall(String pkg) { return CallDetector.NATIVE_PACKAGES.contains(pkg); }
-    private static boolean enabled(IslandItem item) { return nativeCall(item.packageName) || ModuleSettings.thirdPartyCalls(); }
+    private static boolean enabled(IslandItem item) {
+        return nativeCall(item.packageName) ? ModuleSettings.showIncomingCallCard() : ModuleSettings.thirdPartyCalls();
+    }
 
     public void collect(List<IslandItem> out, String foreground) {
         for (IslandItem item : items.values()) {

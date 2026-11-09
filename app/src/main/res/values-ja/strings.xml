@@ -50,6 +50,8 @@
     <string name="setting_otp_desc">認証コードを含む通知が届くと、コードとコピーボタンのあるカードを開きます。</string>
     <string name="setting_otp_copy">コードを自動コピー</string>
     <string name="setting_otp_copy_desc">カードが表示されたらコードをコピーします。クリップボードの内容は置き換わります。</string>
+    <string name="setting_incoming_call_card">着信カードを表示</string>
+    <string name="setting_incoming_call_card_desc">着信中にDynamic Islandの着信カードを表示します。オフにするとSamsung標準の着信画面が使われ、通話中のカードは引き続きDynamic Islandに表示されます。</string>
     <string name="setting_calls">音声チャットの通話</string>
     <string name="setting_calls_desc">音声チャットやVoIPアプリの通話中に、経過時間と終了ボタン付きのカードを表示します。</string>
     <string name="restart_systemui">システムUIを再起動</string>

@@ -50,6 +50,8 @@
     <string name="setting_otp_desc">Текст с кодом подтверждения открывает карточку с кодом и кнопкой копирования.</string>
     <string name="setting_otp_copy">Автоматически копировать коды</string>
     <string name="setting_otp_copy_desc">Копировать код при появлении карточки, заменяя текущее содержимое буфера обмена.</string>
+    <string name="setting_incoming_call_card">Показывать карточку входящего вызова</string>
+    <string name="setting_incoming_call_card_desc">Показывать карточку входящего вызова Dynamic Island во время звонка. Если выключено, используется стандартный интерфейс входящего вызова Samsung, а текущие вызовы по-прежнему отображаются в Dynamic Island.</string>
     <string name="setting_calls">Звонки в голосовых чатах</string>
     <string name="setting_calls_desc">Показывать текущие звонки в голосовых чатах и VoIP-приложениях карточкой с таймером и кнопкой завершения.</string>
     <string name="restart_systemui">Перезапустить System UI</string>

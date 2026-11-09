@@ -16,6 +16,8 @@
     <string name="setting_heads_up">Notificações na ilha</string>
     <string name="setting_all_notifications">Todas as notificações na ilha</string>
     <string name="setting_otp_copy">Copiar códigos automaticamente</string>
+    <string name="setting_incoming_call_card">Mostrar cartão de chamada recebida</string>
+    <string name="setting_incoming_call_card_desc">Mostrar o cartão de chamada recebida da Dynamic Island enquanto o telefone está tocando. Quando desativado, a interface nativa de chamada recebida da Samsung é usada. Chamadas em andamento ainda aparecem na Dynamic Island.</string>
     <string name="setting_calls">Chamadas de voz</string>
     <string name="restart_systemui">Reiniciar interface do sistema</string>
     <string name="restart_systemui_confirm">A barra de status e o painel de notificações serão reiniciados por um momento para recarregar o módulo. Requer root.</string>

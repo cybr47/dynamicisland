@@ -165,6 +165,7 @@ public final class ModuleSettings {
     public static final String KEY_PRIVACY_IN_APP = "privacy_in_app";
     public static final String KEY_OTP_CARD = "otp_card";
     public static final String KEY_OTP_AUTO_COPY = "otp_auto_copy";
+    public static final String KEY_SHOW_INCOMING_CALL_CARD = "show_incoming_call_card";
     public static final String KEY_THIRD_PARTY_CALLS = "third_party_calls";
     /** true = only the listed apps are shown, false (default) = every app except the listed ones. */
     public static final String KEY_APPS_ONLY_LISTED = "apps_only_listed";
@@ -281,6 +282,7 @@ public final class ModuleSettings {
     private static volatile boolean privacyInApp = false;
     private static volatile boolean otpCard = true;
     private static volatile boolean otpAutoCopy = false;
+    private static volatile boolean showIncomingCallCard = true;
     private static volatile boolean thirdPartyCalls = true;
     private static volatile AppFilter appFilter = AppFilter.OFF;
 
@@ -722,6 +724,7 @@ public final class ModuleSettings {
             privacyInApp = source.getBoolean(KEY_PRIVACY_IN_APP, false);
             otpCard = source.getBoolean(KEY_OTP_CARD, true);
             otpAutoCopy = source.getBoolean(KEY_OTP_AUTO_COPY, false);
+            showIncomingCallCard = source.getBoolean(KEY_SHOW_INCOMING_CALL_CARD, true);
             thirdPartyCalls = source.getBoolean(KEY_THIRD_PARTY_CALLS, true);
             Set<String> listed = source.getStringSet(KEY_APPS_LISTED, null);
             AppFilter previousFilter = appFilter;
@@ -783,6 +786,8 @@ public final class ModuleSettings {
         eventToggles = settings.getBoolean(KEY_EVENT_TOGGLES, true);
         torchPill = settings.getBoolean(KEY_TORCH_PILL, true);
         privacyInApp = settings.getBoolean(KEY_PRIVACY_IN_APP, false);
+        showIncomingCallCard = settings.getBoolean(KEY_SHOW_INCOMING_CALL_CARD, true);
+        thirdPartyCalls = settings.getBoolean(KEY_THIRD_PARTY_CALLS, true);
         readGlow(settings);
     }
 
@@ -904,7 +909,7 @@ public final class ModuleSettings {
 
     private static String switchSignature() {
         return "" + ambientGlow + glowAlbum + glowFollowTheme + glowStrength + "/motion=" + glowMotion + "/musicOnly=" + glowMusicOnly + "/" + glowColour + lowPerformance + "/light=" + stillMusic + staticWaveform + limitFrameRate + stillIcons + foregroundNotifications + autoOpenCards + autoOpenS + experimentalRecovery + compactEventIcons + hideBatteryIcon + accentCustom + accentColor + "/system=" + accentSystem + systemAccent + eventCharging + eventRinger + eventBluetooth + eventToggles + torchPill + "/torchStyle=" + torchStyle + headsUpIsland + allNotifications + systemPopupStyle + progressNotifications + hideProgressOriginals
-                + smartRules + privacyIndicator + privacyLocation + privacyInApp + otpCard + otpAutoCopy + thirdPartyCalls + visualizer + colorIcons + shadeMedia + cardHeader
+                + smartRules + privacyIndicator + privacyLocation + privacyInApp + otpCard + otpAutoCopy + showIncomingCallCard + thirdPartyCalls + visualizer + colorIcons + shadeMedia + cardHeader
                 + "/devices=" + chargingInfo + "/" + chargingStats + "/" + eventHeadset + "/" + headsetStay + "/hotspot=" + hotspotCard + "/unlock=" + unlockNotice + "/peekProgress=" + peekProgress + "/progressForeground=" + progressForeground + "/progressAny=" + progressAny + "/stockCharging=" + stockChargingAnimation + "/recordingInput=" + concurrentRecordingInput
                 + "/alwaysVisible=" + alwaysVisible + "/notch=" + notchStyle + "/popup=" + popupSeconds + "/chargingText=" + chargingText + "/swipeUpHides=" + swipeUpHides + "/swipeDownOpens=" + swipeDownOpens + "/iMotion=" + iMode + "/material=" + materialStyle + "/roundness=" + customCardRoundness + "/" + cardCornerRadiusDp + "/outline=" + pillOutlineMode + "/blur=" + transitionBlurMode + "/" + appFilter.onlyListed() + appFilter.size();
     }
@@ -913,7 +918,7 @@ public final class ModuleSettings {
     private static void logChanges(SharedPreferences source) {
         String now = "glow=" + ambientGlow + "/" + glowAlbum + "/" + glowFollowTheme + "/" + glowStrength + "/" + glowColour + "/motion=" + glowMotion + "/musicOnly=" + glowMusicOnly + " lowPerformance=" + lowPerformance + " haptics=" + haptics + " legacyAnimation=" + legacyAnimation + " visualizer=" + visualizer + " cardHeader=" + cardHeader
                 + " recovery=" + experimentalRecovery + " foregroundNotifications=" + foregroundNotifications + " autoOpen=" + autoOpenCards + " customAccent=" + accentCustom + " hideBattery=" + hideBatteryIcon + " systemPopupStyle=" + systemPopupStyle + " headsUpIsland=" + headsUpIsland + " progress=" + progressNotifications + " hideOriginals=" + hideProgressOriginals
-                + " smartRules=" + smartRules + " otp=" + otpCard + "/" + otpAutoCopy + " calls3p=" + thirdPartyCalls
+                + " smartRules=" + smartRules + " otp=" + otpCard + "/" + otpAutoCopy + " incomingCall=" + showIncomingCallCard + " calls3p=" + thirdPartyCalls
                 + " privacy=" + privacyIndicator + "/" + privacyLocation + " events=" + eventCharging + "/" + eventRinger + "/" + eventBluetooth
                 + " pill=" + pillAnchor + "/" + pillXDp + "/" + pillYDp + " size=" + pillHPct + "/" + pillMinWDp + "/" + pillMaxWDp + "/" + keepPillWidth + " hole=" + holeMode + "/" + holeDDp + "/" + holeXDp + "/" + holeYDp + " pausedS=" + pausedTimeoutS + " collapseS=" + autoCollapseS + " rules=" + rulesConfig.revision
                 + " pillOutline=" + pillOutlineMode + " showInFullscreen=" + showInFullscreen + " appFilter=" + (appFilter.onlyListed() ? "only " : "except ") + appFilter.size();
@@ -1044,6 +1049,12 @@ public final class ModuleSettings {
     public static boolean appAllowed(String packageName) {
         ensureStarted();
         return appFilter.allows(packageName);
+    }
+
+    /** Show Dynamic Island's incoming-call card while a native phone call is ringing. */
+    public static boolean showIncomingCallCard() {
+        ensureStarted();
+        return showIncomingCallCard;
     }
 
     /** Calls from third-party calling apps shown on the island, not only the phone app's. */

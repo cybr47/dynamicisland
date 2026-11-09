@@ -8,11 +8,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
+import dev.android.dynamicisland.settings.ModuleSettings;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -28,8 +30,17 @@ public class SamsungCallPopupTakeoverTest {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Integer> requests = new ArrayList<>();
     private final SamsungCallPopupTakeover takeover = new SamsungCallPopupTakeover(main, requests::add);
+    private boolean prevIncomingCard;
 
-    @After public void restore() { main.removeCallbacksAndMessages(null); }
+    @Before public void saveSettings() {
+        prevIncomingCard = ReflectionHelpers.getStaticField(ModuleSettings.class, "showIncomingCallCard");
+        ReflectionHelpers.setStaticField(ModuleSettings.class, "showIncomingCallCard", true);
+    }
+
+    @After public void restore() {
+        main.removeCallbacksAndMessages(null);
+        ReflectionHelpers.setStaticField(ModuleSettings.class, "showIncomingCallCard", prevIncomingCard);
+    }
 
     private StatusBarNotification notification(String pkg, int id, int user, long postedAt, int type) {
         Notification n = new Notification.Builder(app, "calls").setSmallIcon(android.R.drawable.stat_sys_phone_call)
@@ -140,5 +151,49 @@ public class SamsungCallPopupTakeoverTest {
         assertFalse("an old-style ringing call without a card stays stock", SamsungCallPopupTakeover.replaceable(untyped, false, true));
         untyped.extras.putBoolean(Notification.EXTRA_SHOW_CHRONOMETER, true);
         assertTrue("one that runs a clock is in progress", SamsungCallPopupTakeover.replaceable(untyped, false, true));
+    }
+
+    @Test public void disabledIncomingCallCardLeavesRingingToSamsungButStillTakesOverOngoingCallsAndCancelsRetries() {
+        StatusBarNotification ringing = notification(SamsungCallPopupTakeover.PACKAGE, 1, 0, 1000, 1);
+        StatusBarNotification legacyRinging = notification(SamsungCallPopupTakeover.PACKAGE, 2, 0, 1000, -1);
+        StatusBarNotification ongoing = notification(SamsungCallPopupTakeover.PACKAGE, 1, 0, 1000, 2);
+        StatusBarNotification screening = notification(SamsungCallPopupTakeover.PACKAGE, 3, 0, 1000, 3);
+        StatusBarNotification legacyOngoing = notification(SamsungCallPopupTakeover.PACKAGE, 2, 0, 1000, -1);
+        legacyOngoing.getNotification().extras.putBoolean(Notification.EXTRA_SHOW_CHRONOMETER, true);
+
+        ReflectionHelpers.setStaticField(ModuleSettings.class, "showIncomingCallCard", false);
+        assertFalse("ringing callType=1 must not be replaceable when disabled",
+                SamsungCallPopupTakeover.replaceable(ringing.getNotification(), true, true));
+        assertFalse("legacy ringing notification without chronometer must not be replaceable when disabled",
+                SamsungCallPopupTakeover.replaceable(legacyRinging.getNotification(), true, true));
+        assertTrue("ongoing callType=2 remains replaceable when disabled",
+                SamsungCallPopupTakeover.replaceable(ongoing.getNotification(), false, true));
+        assertTrue("screening callType=3 remains replaceable when disabled",
+                SamsungCallPopupTakeover.replaceable(screening.getNotification(), false, true));
+        assertTrue("legacy ongoing notification with chronometer remains replaceable when disabled",
+                SamsungCallPopupTakeover.replaceable(legacyOngoing.getNotification(), false, true));
+
+        // Ringing call does not send hide broadcast when preference is disabled
+        takeover.setNotifications(List.of(ringing, legacyRinging));
+        advance(5000);
+        assertTrue("no hide broadcast sent while ringing with preference disabled", requests.isEmpty());
+
+        // When the same call is answered and becomes ongoing, takeover proceeds normally
+        takeover.setNotifications(List.of(ongoing));
+        advance(0);
+        assertEquals(List.of(0), requests);
+        takeover.setNotifications(List.of());
+        advance(5000);
+        requests.clear();
+
+        // Live preference toggle: enabling starts hide burst; disabling mid-ring cancels remaining retries
+        ReflectionHelpers.setStaticField(ModuleSettings.class, "showIncomingCallCard", true);
+        takeover.setNotifications(List.of(ringing));
+        advance(0);
+        assertEquals(1, requests.size());
+        ReflectionHelpers.setStaticField(ModuleSettings.class, "showIncomingCallCard", false);
+        takeover.setNotifications(List.of(ringing));
+        advance(5000);
+        assertEquals("pending hide retries must be cancelled when preference is disabled while ringing", 1, requests.size());
     }
 }

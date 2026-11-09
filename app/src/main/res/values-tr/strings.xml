@@ -48,6 +48,8 @@
     <string name="setting_otp_desc">Doğrulama kodu içeren bir mesaj geldiğinde kodun ve Kopyala düğmesinin bulunduğu bir kart açar.</string>
     <string name="setting_otp_copy">Kodları otomatik kopyala</string>
     <string name="setting_otp_copy_desc">Kart görünür görünmez kodu panoya kopyalar (önceden kopyaladığınız içeriğin yerini alır).</string>
+    <string name="setting_incoming_call_card">Gelen arama kartını göster</string>
+    <string name="setting_incoming_call_card_desc">Telefon çalarken Dynamic Island\'ın gelen arama kartını gösterir. Kapatıldığında bunun yerine Samsung\'un yerel gelen arama arayüzü kullanılır. Devam eden aramalar Dynamic Island\'da görünmeye devam eder.</string>
     <string name="setting_calls">Sesli sohbet aramaları</string>
     <string name="setting_calls_desc">Sesli sohbet ve VoIP uygulamalarındaki devam eden aramaları, süre ve sonlandırma düğmesi içeren arama kartında gösterir.</string>
     <string name="restart_systemui">Sistem Arayüzünü yeniden başlat</string>

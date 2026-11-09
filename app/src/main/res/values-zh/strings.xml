@@ -50,6 +50,8 @@
     <string name="setting_otp_desc">收到包含验证码的文本时，展开显示验证码和复制按钮的卡片。</string>
     <string name="setting_otp_copy">自动复制验证码</string>
     <string name="setting_otp_copy_desc">卡片出现时立即复制验证码，将替换剪贴板原有内容。</string>
+    <string name="setting_incoming_call_card">显示来电卡片</string>
+    <string name="setting_incoming_call_card_desc">手机响铃时显示灵动岛的来电卡片。关闭后将改用三星原生来电界面，通话中的卡片仍会显示在灵动岛中。</string>
     <string name="setting_calls">语音聊天通话</string>
     <string name="setting_calls_desc">为语音聊天和 VoIP 应用的进行中通话显示计时及挂断按钮。</string>
     <string name="restart_systemui">重启系统界面</string>

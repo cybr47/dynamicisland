@@ -267,8 +267,9 @@ public final class IslandController implements IslandHost, IslandWindow.Listener
     private boolean islandTakesCall(StatusBarNotification sbn) {
         IslandView view = placement.view();
         if (ModuleSettings.systemPopupStyle()) return dev.android.dynamicisland.xposed.hooks.StockPopupStyle.isShowing(sbn.getKey())
-                || incomingBanner.owner(sbn.getKey(), view) != null;
-        return SamsungCallPopupTakeover.replaceable(sbn.getNotification(), headsUpOwner(sbn.getKey()) != null,
+                || (ModuleSettings.showIncomingCallCard() && incomingBanner.owner(sbn.getKey(), view) != null);
+        return SamsungCallPopupTakeover.replaceable(sbn.getNotification(),
+                ModuleSettings.showIncomingCallCard() && headsUpOwner(sbn.getKey()) != null,
                 view != null && !view.isSuppressedNow());
     }
 

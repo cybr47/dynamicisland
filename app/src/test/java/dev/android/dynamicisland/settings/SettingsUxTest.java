@@ -93,6 +93,22 @@ public class SettingsUxTest {
         assertFalse(p.getBoolean(ModuleSettings.KEY_ALL_NOTIFICATIONS,true));
     }
 
+    @Test public void incomingCallCardToggleIsOnNotificationsPageDefaultsToTrueAndRemainsSeparateFromThirdPartyCalls() {
+        SettingsActivity a=activity();SharedPreferences p=prefs(a);open(a,"notificationsPage");
+        Switch incoming=toggle(a,R.string.setting_incoming_call_card);
+        Switch voip=toggle(a,R.string.setting_calls);
+        assertNotNull("incoming call card toggle is present under Activity cards",incoming);
+        assertNotNull("voice-chat calls toggle remains present",voip);
+        assertTrue("default value is true when unset",incoming.isChecked());
+        assertTrue(voip.isChecked());
+        incoming.toggle();
+        assertFalse(p.getBoolean(ModuleSettings.KEY_SHOW_INCOMING_CALL_CARD,true));
+        assertTrue("toggling incoming call card does not alter third_party_calls",p.getBoolean(ModuleSettings.KEY_THIRD_PARTY_CALLS,true));
+        voip.toggle();
+        assertFalse(p.getBoolean(ModuleSettings.KEY_THIRD_PARTY_CALLS,true));
+        assertFalse(p.getBoolean(ModuleSettings.KEY_SHOW_INCOMING_CALL_CARD,true));
+    }
+
     @Test public void systemPopupStyleIsOptionalExclusiveAndIndependentOfIslandForegroundSettings() {
         SettingsActivity a=activity();SharedPreferences p=prefs(a);open(a,"notificationsPage");
         choose(a,R.string.ui_notification_mode,3);

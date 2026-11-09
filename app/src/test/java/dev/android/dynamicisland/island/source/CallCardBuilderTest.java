@@ -8,15 +8,19 @@ import static org.junit.Assert.assertTrue;
 import android.content.Context;
 import dev.android.dynamicisland.island.graphics.Glyphs;
 import dev.android.dynamicisland.island.model.IslandItem;
+import dev.android.dynamicisland.settings.ModuleSettings;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import org.robolectric.util.ReflectionHelpers;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 35)
@@ -48,6 +52,18 @@ public class CallCardBuilderTest {
             () -> { }, new WhatsAppCallClock());
     private final List<IslandItem> out = new ArrayList<>();
     private final Set<String> hidden = new HashSet<>();
+    private boolean prevIncomingCard;
+
+    @Before
+    public void saveSettings() {
+        prevIncomingCard = ReflectionHelpers.getStaticField(ModuleSettings.class, "showIncomingCallCard");
+        ReflectionHelpers.setStaticField(ModuleSettings.class, "showIncomingCallCard", true);
+    }
+
+    @After
+    public void restoreSettings() {
+        ReflectionHelpers.setStaticField(ModuleSettings.class, "showIncomingCallCard", prevIncomingCard);
+    }
 
     private void collect(String foreground, boolean confirmed) {
         out.clear();
@@ -145,6 +161,35 @@ public class CallCardBuilderTest {
         assertFalse(CallCardBuilder.isCallApp("com.whatsapp", INCALLUI));
         assertNull(null);
     }
+
+    @Test
+    public void disabledIncomingCallCardSkipsRingingPhaseButBuildsOngoingCallWhenUserLeavesCallScreen() {
+        ReflectionHelpers.setStaticField(ModuleSettings.class, "showIncomingCallCard", false);
+        controller.chipShown = true;
+        controller.callNotificationInfo.callStartTime = 0L;
+        builder.setPhoneRinging(() -> true);
+        collect("com.sec.android.app.launcher", true);
+        assertTrue("ringing phase is suppressed when showIncomingCallCard is false", out.isEmpty());
+
+        // User answers the call: callStartTime is set and full-screen InCallUI opens
+        controller.chipShown = false;
+        controller.callNotificationInfo.callStartTime = System.currentTimeMillis() - 3_000;
+        builder.setPhoneRinging(() -> false);
+        collect(INCALLUI, true);
+        assertTrue("suppressed while full-screen InCallUI is in foreground", out.isEmpty());
+        assertEquals(Set.of("call:" + controller.callNotificationInfo.key), hidden);
+
+        // User presses Back to return to another app: ongoing call card appears with chronometer, speaker, and hang-up
+        collect("com.sec.android.app.launcher", true);
+        assertEquals(1, out.size());
+        IslandItem ongoing = out.get(0);
+        assertFalse(ongoing.incomingCall);
+        assertEquals(IslandItem.Trailing.CHRONOMETER, ongoing.trailing);
+        assertEquals(2, ongoing.actions.size());
+        assertEquals("Speaker", String.valueOf(ongoing.actions.get(0).title));
+        assertEquals("End call", String.valueOf(ongoing.actions.get(1).title));
+    }
+
     public static class Actions { public List<android.app.Notification.Action> mActions; }
     private android.app.Notification.Action action(String name,String intent) {
         return new android.app.Notification.Action.Builder(null,name,

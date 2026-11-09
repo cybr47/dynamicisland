@@ -50,6 +50,8 @@
     <string name="setting_otp_desc">인증번호가 담긴 문자가 오면 번호와 복사 버튼이 있는 카드를 보여줍니다.</string>
     <string name="setting_otp_copy">인증번호 자동 복사</string>
     <string name="setting_otp_copy_desc">카드가 뜨는 즉시 번호를 클립보드에 복사합니다. 이전에 복사해 둔 내용은 바뀝니다.</string>
+    <string name="setting_incoming_call_card">수신 전화 카드 표시</string>
+    <string name="setting_incoming_call_card_desc">벨이 울리는 동안 다이나믹 아일랜드의 수신 전화 카드를 표시합니다. 끄면 삼성 기본 수신 전화 화면을 대신 사용하며, 통화 중 카드는 계속 다이나믹 아일랜드에 표시됩니다.</string>
     <string name="setting_calls">음성 채팅 통화</string>
     <string name="setting_calls_desc">음성 채팅·인터넷 전화 앱의 진행 중인 통화를 통화 시간과 종료 버튼이 있는 통화 카드로 보여줍니다.</string>
     <string name="restart_systemui">시스템 UI 재시작</string>
