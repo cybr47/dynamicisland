@@ -8,7 +8,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/** Announce each ringing call once, keep it open until it ends, and respect explicit dismissal. */
+/** Opens an incoming call without depending on ordinary notification auto-open, and keeps it until answered or dismissed. */
 final class IncomingCallBanner {
     private final Set<String> announced = new HashSet<>();
     private IslandItem current;
@@ -20,7 +20,7 @@ final class IncomingCallBanner {
     }
 
     IslandItem owner(String notificationKey, IslandView view) {
-        return current != null && enabled(current) && notificationKey.equals(current.sourceKey) && view != null
+        return current != null && enabled(current) && notificationKey != null && notificationKey.equals(current.sourceKey) && view != null
                 && !view.isSuppressedNow() && view.isShowingCard(current) ? current : null;
     }
 
@@ -37,7 +37,7 @@ final class IncomingCallBanner {
         } else if (visible && !shown.isEmpty() && shown.get(0).priority() > current.priority()) {
             announced.remove(current.key); // Charging may interrupt; resume the ringing card after it leaves.
             current = null;
-        }
+        } else if (!visible) current = null;
     }
 
     boolean show(IslandView view, List<IslandItem> shown) {
@@ -46,7 +46,6 @@ final class IncomingCallBanner {
             if (!shown.isEmpty() && shown.get(0).priority() > item.priority()) return false;
             if (view.peek(item, 1_000)) {
                 announced.add(item.key); current = item;
-                dev.android.dynamicisland.xposed.Diagnostics.fact("incoming call banner", "caller and answer/decline shown while ringing");
                 return true;
             }
         }

@@ -72,6 +72,11 @@ public class IncomingCallBannerTest {
         var other=new IslandItem("call:other");other.kind=IslandItem.Kind.CALL;
         var items=new java.util.ArrayList<>(List.of(duplicate,oa,noEntry,fallback,incoming,other));ItemDedupe.apply(items,key->Set.of());
         assertEquals(List.of(incoming,other),items);
+
+        // Even when showIncomingCallCard is disabled (so `incoming` is not in `items`), extra ringing keys still suppress duplicate call/oa cards
+        var withoutIncoming=new java.util.ArrayList<>(List.of(duplicate,oa,noEntry,fallback,other));
+        ItemDedupe.apply(withoutIncoming,key->Set.of(),Set.of("call"));
+        assertEquals(List.of(other),withoutIncoming);
     }
 
     @Test public void aDedicatedIncomingCardWinsOverARingingLegacyCardForTheSameNotification() {

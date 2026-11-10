@@ -4,6 +4,7 @@ import android.app.KeyguardManager;
 import android.content.Context;
 import android.os.Handler;
 import android.os.PowerManager;
+import dev.android.dynamicisland.island.detect.CallDetector;
 import dev.android.dynamicisland.settings.ModuleSettings;
 import dev.android.dynamicisland.xposed.Refl;
 import dev.android.dynamicisland.xposed.SafeHook;
@@ -56,6 +57,8 @@ public final class BriefPopupBridge {
             scheduler = param.args.length > 0 ? param.args[0] : null;
         Object notifications = Refl.get(scheduler, "mNotificationLightingScheduler");
         Object info = Refl.get(notifications, "mCurrentLightingScheduleInfo");
+        Object pkg = info == null ? null : Refl.get(info, "mPackageName");
+        if (!ModuleSettings.showIncomingCallCard() && pkg instanceof String && CallDetector.NATIVE_PACKAGES.contains(pkg)) return;
         Object key = info == null ? null : Refl.call(info, "getNotificationKey");
         Object binder = Refl.get(context, "mConditionListener");
         Object handler = Refl.get(scheduler, "mHandler");
@@ -74,7 +77,7 @@ public final class BriefPopupBridge {
             if (!Boolean.TRUE.equals(supportsAppLock)) return;
             Object appLock = Refl.call(requester, "isAppLockEnabled");
             if (!Boolean.FALSE.equals(appLock) && (!Boolean.TRUE.equals(appLock)
-                    || !Boolean.FALSE.equals(Refl.call(requester, "shouldHideNotiForAppLockByPackage", Refl.get(info, "mPackageName"))))) return;
+                    || !Boolean.FALSE.equals(Refl.call(requester, "shouldHideNotiForAppLockByPackage", pkg)))) return;
         }
         Method request = Refl.method(binder.getClass(), "turnToHeadsUp", 1);
         Method status = Refl.method(binder.getClass(), "isRowPinned", 1);

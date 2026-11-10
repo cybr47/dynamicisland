@@ -5,6 +5,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.os.Bundle;
 import android.widget.RemoteViews;
+import dev.android.dynamicisland.island.detect.CallDetector;
 import dev.android.dynamicisland.island.detect.IconContrast;
 import dev.android.dynamicisland.island.graphics.Colors;
 import dev.android.dynamicisland.island.model.IslandItem;
@@ -56,7 +57,8 @@ final class OaCardBuilder {
         if ("com.sec.android.app.voicenote".equals(pkg)) {
             return IslandItem.Kind.RECORDING;
         }
-        return "call".equals(category) ? IslandItem.Kind.CALL : IslandItem.Kind.LIVE;
+        return "call".equals(category) || (pkg != null && CallDetector.NATIVE_PACKAGES.contains(pkg))
+                ? IslandItem.Kind.CALL : IslandItem.Kind.LIVE;
     }
 
     private IslandItem build(OaActivity a) {

@@ -13,6 +13,7 @@ import dev.android.dynamicisland.island.model.IslandItem;
 import dev.android.dynamicisland.settings.ModuleSettings;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -99,8 +100,10 @@ public class IncomingCallSourceTest {
 
         ReflectionHelpers.setStaticField(ModuleSettings.class,"showIncomingCallCard",false);
         assertNotNull("notification detection and call-state classification remain active",source.build(nativeRinging));
-        assertFalse("heads-up post does not claim native ringing call when disabled",source.posted(nativeRinging));
-        assertNull(source.item(nativeRinging.getKey()));
+        assertTrue("posted() still identifies and tracks the ringing call so HeadsUpTakeover does not claim it",source.posted(nativeRinging));
+        assertTrue("isRingingKey tracks the ringing notification even when card display is disabled",source.isRingingKey(nativeRinging.getKey()));
+        assertEquals(Set.of(nativeRinging.getKey()),source.ringingSourceKeys());
+        assertNull("item() returns null for native ringing call when disabled",source.item(nativeRinging.getKey()));
         assertTrue(source.activeKeys().isEmpty());
         var out=new ArrayList<IslandItem>();
         source.collect(out,"example.other");
@@ -108,7 +111,7 @@ public class IncomingCallSourceTest {
 
         assertTrue("third-party VoIP incoming call still works when native incoming card is disabled",source.posted(voipRinging));
         assertNotNull(source.item(voipRinging.getKey()));
-        assertEquals(java.util.Set.of("incoming:"+voipRinging.getKey()),source.activeKeys());
+        assertEquals(Set.of("incoming:"+voipRinging.getKey()),source.activeKeys());
         source.collect(out,"example.other");
         assertEquals(1,out.size());
         assertEquals("example.voip",out.get(0).packageName);
@@ -125,6 +128,6 @@ public class IncomingCallSourceTest {
         ReflectionHelpers.setStaticField(ModuleSettings.class,"thirdPartyCalls",false);
         assertNotNull(source.item(nativeRinging.getKey()));
         assertNull(source.item(voipRinging.getKey()));
-        assertEquals(java.util.Set.of("incoming:"+nativeRinging.getKey()),source.activeKeys());
+        assertEquals(Set.of("incoming:"+nativeRinging.getKey()),source.activeKeys());
     }
 }

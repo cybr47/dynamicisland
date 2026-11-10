@@ -132,6 +132,7 @@ public final class IslandController implements IslandHost, IslandWindow.Listener
     }
 
     public IslandItem itemForKey(String notificationKey) {
+        if (sources.incoming.isRingingKey(notificationKey)) return null;
         return sources.oa.itemForKey(notificationKey);
     }
 
@@ -249,7 +250,7 @@ public final class IslandController implements IslandHost, IslandWindow.Listener
      */
     public boolean peekHeadsUp(StatusBarNotification sbn) {
         if (ModuleSettings.systemPopupStyle()) return false;
-        boolean wasIncoming = sbn != null && sources.incoming.item(sbn.getKey()) != null;
+        boolean wasIncoming = sbn != null && sources.incoming.isRingingKey(sbn.getKey());
         if (sources.incoming.posted(sbn)) {
             refreshNow();
             return ownsHeadsUp(sbn.getKey());
@@ -266,8 +267,11 @@ public final class IslandController implements IslandHost, IslandWindow.Listener
     /** Whether the island takes this call over from Samsung's own window right now (else that window must stay). */
     private boolean islandTakesCall(StatusBarNotification sbn) {
         IslandView view = placement.view();
-        if (ModuleSettings.systemPopupStyle()) return dev.android.dynamicisland.xposed.hooks.StockPopupStyle.isShowing(sbn.getKey())
-                || (ModuleSettings.showIncomingCallCard() && incomingBanner.owner(sbn.getKey(), view) != null);
+        if (ModuleSettings.systemPopupStyle()) {
+            boolean popupShown = dev.android.dynamicisland.xposed.hooks.StockPopupStyle.isShowing(sbn.getKey())
+                    || (ModuleSettings.showIncomingCallCard() && incomingBanner.owner(sbn.getKey(), view) != null);
+            return SamsungCallPopupTakeover.replaceable(sbn.getNotification(), popupShown, popupShown);
+        }
         return SamsungCallPopupTakeover.replaceable(sbn.getNotification(),
                 ModuleSettings.showIncomingCallCard() && headsUpOwner(sbn.getKey()) != null,
                 view != null && !view.isSuppressedNow());

@@ -45,7 +45,7 @@ public final class IncomingCallSource {
         IslandItem item = safelyBuild(notification);
         if (item == null) { if (notification != null) items.remove(notification.getKey()); return false; }
         items.put(item.sourceKey, item);
-        return enabled(item);
+        return true;
     }
 
     private IslandItem safelyBuild(StatusBarNotification notification) {
@@ -57,6 +57,17 @@ public final class IncomingCallSource {
         IslandItem item = items.get(notificationKey);
         return item != null && enabled(item) ? item : null;
     }
+
+    /** True when the notification key is currently tracked as a ringing call, even if hidden by settings. */
+    public boolean isRingingKey(String notificationKey) {
+        return notificationKey != null && items.containsKey(notificationKey);
+    }
+
+    /** Source notification keys of all currently ringing calls, regardless of card display preference. */
+    public Set<String> ringingSourceKeys() {
+        return items.isEmpty() ? Set.of() : new java.util.HashSet<>(items.keySet());
+    }
+
     public Set<String> activeKeys() {
         if (items.isEmpty()) return Set.of();
         Set<String> keys = new java.util.HashSet<>();
@@ -66,6 +77,32 @@ public final class IncomingCallSource {
     private static boolean nativeCall(String pkg) { return CallDetector.NATIVE_PACKAGES.contains(pkg); }
     private static boolean enabled(IslandItem item) {
         return nativeCall(item.packageName) ? ModuleSettings.showIncomingCallCard() : ModuleSettings.thirdPartyCalls();
+    }
+
+    /** True when the notification carries both answer and decline/hang-up controls. */
+    public static boolean hasAnswerAndDecline(Notification notification) {
+        if (notification == null || notification.extras == null) return false;
+        PendingIntent answer = notification.extras.getParcelable("android.answerIntent", PendingIntent.class);
+        PendingIntent decline = notification.extras.getParcelable("android.declineIntent", PendingIntent.class);
+        if (notification.actions != null) for (Notification.Action action : notification.actions) {
+            if (action == null || action.actionIntent == null) continue;
+            if (ActionWords.isAnswer(action.title)) answer = action.actionIntent;
+            else if (ActionWords.isDestructive(action.title) && !ActionWords.isMute(action.title)) decline = action.actionIntent;
+        }
+        return answer != null && decline != null;
+    }
+
+    /** True when a notification represents an incoming/ringing call (independently of settings). */
+    public static boolean isIncomingCallNotification(StatusBarNotification sbn) {
+        if (sbn == null || sbn.getNotification() == null) return false;
+        Notification notification = sbn.getNotification();
+        if (notification.extras == null || (notification.flags & Notification.FLAG_GROUP_SUMMARY) != 0) return false;
+        boolean callStyle = Notification.CallStyle.class.getName().equals(notification.extras.getString(Notification.EXTRA_TEMPLATE));
+        if (!callStyle && !Notification.CATEGORY_CALL.equals(notification.category)) return false;
+        int type = notification.extras.getInt("android.callType", -1);
+        if (type == 1) return true;
+        if (type == 2 || type == 3) return false;
+        return hasAnswerAndDecline(notification);
     }
 
     public void collect(List<IslandItem> out, String foreground) {

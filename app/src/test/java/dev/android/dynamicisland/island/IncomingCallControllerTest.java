@@ -133,18 +133,31 @@ public class IncomingCallControllerTest {
         view(controller).setSuppressed(true);assertFalse(controller.peekHeadsUp(call));assertFalse(controller.ownsHeadsUp(call.getKey()));
     }
 
-    @Test public void disabledIncomingCallCardLeavesRingingToSamsungThenDisplaysOngoingCallAfterAnswering() {
+    @Test public void disabledIncomingCallCardLeavesRingingToSamsungWithoutHijackingHeadsUpOrShadeRowThenDisplaysOngoingCallAfterAnswering() {
         var controller=controller(false);
+        // Even with headsUpIsland=true and autoOpenCards=true (default user settings), disabled incoming call card must not hijack heads-up or shade row
+        ReflectionHelpers.setStaticField(ModuleSettings.class,"headsUpIsland",true);
+        ReflectionHelpers.setStaticField(ModuleSettings.class,"autoOpenCards",true);
         ReflectionHelpers.setStaticField(ModuleSettings.class,"showIncomingCallCard",false);
         shadowOf((Application) app).clearBroadcastIntents();
 
+        // Simulate One UI 8 OngoingCallController having callStartTime > 0 (from notification.when) during ringing
+        var prematureCallController = new OngoingCallController();
+        prematureCallController.chipShown = true;
+        prematureCallController.callNotificationInfo.callStartTime = System.currentTimeMillis() - 1_000;
+        controller.setCallController(prematureCallController);
+        setConfirmedForeground(controller, "com.sec.android.app.launcher");
+
         var ringing=call(true);
-        assertFalse("heads-up pin decision must not claim native ringing call when disabled",controller.peekHeadsUp(ringing));
+        assertFalse("heads-up pin decision must not claim native ringing call when disabled even with headsUpIsland=true",controller.peekHeadsUp(ringing));
         controller.onNotificationsSnapshot(List.of(ringing));
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(6));
         assertFalse("Dynamic Island must not auto-expand for native incoming call when disabled",view(controller).isExpanded());
+        assertTrue("no regular call card or OA card is shown on Dynamic Island while ringing",shownItems(controller).isEmpty());
         assertFalse(controller.ownsHeadsUp(ringing.getKey()));
         assertNull(controller.headsUpOwner(ringing.getKey()));
+        assertNull("ShadeLiveCards itemForKey must return null while ringing so notification panel keeps native call presentation",
+                controller.itemForKey(ringing.getKey()));
         assertEquals("Samsung mini-window hide broadcast must not be sent while ringing when disabled",0L,hideBroadcastCount());
 
         // Third-party VoIP incoming call still works while native incoming call card is disabled

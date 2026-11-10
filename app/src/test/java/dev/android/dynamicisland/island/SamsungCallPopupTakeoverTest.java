@@ -3,6 +3,8 @@ package dev.android.dynamicisland.island;
 import static org.junit.Assert.*;
 import android.app.Application;
 import android.app.Notification;
+import android.app.PendingIntent;
+import android.content.Intent;
 import android.media.AudioManager;
 import android.os.Handler;
 import android.os.Looper;
@@ -156,6 +158,13 @@ public class SamsungCallPopupTakeoverTest {
     @Test public void disabledIncomingCallCardLeavesRingingToSamsungButStillTakesOverOngoingCallsAndCancelsRetries() {
         StatusBarNotification ringing = notification(SamsungCallPopupTakeover.PACKAGE, 1, 0, 1000, 1);
         StatusBarNotification legacyRinging = notification(SamsungCallPopupTakeover.PACKAGE, 2, 0, 1000, -1);
+        StatusBarNotification untypedRingingWithChrono = notification(SamsungCallPopupTakeover.PACKAGE, 4, 0, 1000, -1);
+        untypedRingingWithChrono.getNotification().extras.putBoolean(Notification.EXTRA_SHOW_CHRONOMETER, true);
+        PendingIntent pi = PendingIntent.getBroadcast(app, 0, new Intent("act"), PendingIntent.FLAG_IMMUTABLE);
+        untypedRingingWithChrono.getNotification().actions = new Notification.Action[]{
+                new Notification.Action.Builder(null, "Answer", pi).build(),
+                new Notification.Action.Builder(null, "Decline", pi).build()
+        };
         StatusBarNotification ongoing = notification(SamsungCallPopupTakeover.PACKAGE, 1, 0, 1000, 2);
         StatusBarNotification screening = notification(SamsungCallPopupTakeover.PACKAGE, 3, 0, 1000, 3);
         StatusBarNotification legacyOngoing = notification(SamsungCallPopupTakeover.PACKAGE, 2, 0, 1000, -1);
@@ -166,6 +175,8 @@ public class SamsungCallPopupTakeoverTest {
                 SamsungCallPopupTakeover.replaceable(ringing.getNotification(), true, true));
         assertFalse("legacy ringing notification without chronometer must not be replaceable when disabled",
                 SamsungCallPopupTakeover.replaceable(legacyRinging.getNotification(), true, true));
+        assertFalse("untyped ringing notification with premature chronometer but Answer+Decline actions must not be replaceable when disabled",
+                SamsungCallPopupTakeover.replaceable(untypedRingingWithChrono.getNotification(), true, true));
         assertTrue("ongoing callType=2 remains replaceable when disabled",
                 SamsungCallPopupTakeover.replaceable(ongoing.getNotification(), false, true));
         assertTrue("screening callType=3 remains replaceable when disabled",
@@ -174,7 +185,7 @@ public class SamsungCallPopupTakeoverTest {
                 SamsungCallPopupTakeover.replaceable(legacyOngoing.getNotification(), false, true));
 
         // Ringing call does not send hide broadcast when preference is disabled
-        takeover.setNotifications(List.of(ringing, legacyRinging));
+        takeover.setNotifications(List.of(ringing, legacyRinging, untypedRingingWithChrono));
         advance(5000);
         assertTrue("no hide broadcast sent while ringing with preference disabled", requests.isEmpty());
 

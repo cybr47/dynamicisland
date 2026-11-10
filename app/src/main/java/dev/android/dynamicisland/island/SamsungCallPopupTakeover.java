@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.os.Handler;
 import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
+import dev.android.dynamicisland.island.source.IncomingCallSource;
 import dev.android.dynamicisland.settings.ModuleSettings;
 import dev.android.dynamicisland.xposed.Diagnostics;
 import dev.android.dynamicisland.xposed.XLog;
@@ -78,6 +79,7 @@ final class SamsungCallPopupTakeover {
         int type = notification.extras == null ? -1 : notification.extras.getInt("android.callType", -1);
         if (type == 1) return ModuleSettings.showIncomingCallCard() && cardBuilt;
         if (type == 2 || type == 3) return true;
+        if (IncomingCallSource.hasAnswerAndDecline(notification)) return ModuleSettings.showIncomingCallCard() && cardBuilt;
         boolean clock = notification.extras != null && notification.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false);
         return clock || (ModuleSettings.showIncomingCallCard() && cardBuilt);
     }
