@@ -149,27 +149,8 @@ final class CallCardBuilder {
         if (pkg != null && !TELECOM_PACKAGES.contains(pkg)) {
             return false;
         }
-        String key = (String) Refl.get(info, "key");
-        Object nowBar = key == null || reader == null ? null : reader.nowBarOnly(key);
-        if (nowBar != null && hasAnswerAction(nowBar)) {
-            return true;
-        }
         Object start = Refl.get(info, "callStartTime");
         return !(start instanceof Long && (Long) start > 0) && phoneRinging.getAsBoolean();
-    }
-
-    private static boolean hasAnswerAction(Object nowBar) {
-        Object actions = Refl.get(nowBar, "mActions");
-        if (actions instanceof List) {
-            for (Object o : (List<?>) actions) {
-                if (o instanceof Notification.Action && ((Notification.Action) o).actionIntent != null
-                        && ((Notification.Action) o).title != null
-                        && ActionWords.isAnswer(((Notification.Action) o).title)) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     private IslandItem card(Object info, String key, String pkg) {

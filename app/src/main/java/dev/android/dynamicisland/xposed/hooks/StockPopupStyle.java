@@ -16,10 +16,8 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.TextView;
 import dev.android.dynamicisland.island.IslandController;
-import dev.android.dynamicisland.island.detect.CallDetector;
 import dev.android.dynamicisland.island.material.FrostedSurface;
 import dev.android.dynamicisland.island.material.MaterialShape;
-import dev.android.dynamicisland.island.source.IncomingCallSource;
 import dev.android.dynamicisland.island.window.ShadeMaterialBackdrop;
 import dev.android.dynamicisland.settings.ModuleSettings;
 import dev.android.dynamicisland.xposed.Diagnostics;
@@ -85,22 +83,7 @@ public final class StockPopupStyle {
         return ModuleSettings.systemPopupStyle() && content.isShown()
                 && (Boolean.TRUE.equals(Refl.get(content, "mIsHeadsUp"))
                     || Boolean.TRUE.equals(Refl.get(content, "mHeadsUpAnimatingAway")))
-                && !disabledIncomingCall(content)
                 && popupChild(content) != null;
-    }
-
-    private static boolean disabledIncomingCall(View content) {
-        if (ModuleSettings.showIncomingCallCard()) return false;
-        StatusBarNotification sbn = notificationOf(content);
-        return sbn != null && CallDetector.NATIVE_PACKAGES.contains(sbn.getPackageName())
-                && IncomingCallSource.isIncomingCallNotification(sbn);
-    }
-
-    private static StatusBarNotification notificationOf(View content) {
-        Object entry = Refl.get(Refl.get(content, "mContainingNotification"), "mEntryAdapter|mEntry");
-        Object sbn = entry == null ? null : Refl.call(entry, "getSbn");
-        if (sbn == null && entry != null) sbn = Refl.get(entry, "mSbn");
-        return sbn instanceof StatusBarNotification ? (StatusBarNotification) sbn : null;
     }
 
     private static View popupChild(View content) {
@@ -158,8 +141,10 @@ public final class StockPopupStyle {
                 tintText(next);
                 boolean changed = !active;
                 active = true;
-                StatusBarNotification sbn = notificationOf(host);
-                if (sbn != null) key = sbn.getKey();
+                Object entry = Refl.get(Refl.get(host, "mContainingNotification"), "mEntryAdapter|mEntry");
+                Object sbn = entry == null ? null : Refl.call(entry, "getSbn");
+                if (sbn == null && entry != null) sbn = Refl.get(entry, "mSbn");
+                if (sbn instanceof StatusBarNotification) key = ((StatusBarNotification) sbn).getKey();
                 // Prepare before the row background and its RenderNode clips are recorded on the first frame.
                 appearance.sync(next, true, true);
                 if (changed) notifyController(host);

@@ -178,7 +178,7 @@ final class IslandSources {
                     ? dev.android.dynamicisland.island.graphics.Colors.readableOnBlack(accent) : 0;
         }
         SwitchGate.apply(items);
-        ItemDedupe.apply(items, HideDuplicated::copyKeysOf, incoming.ringingSourceKeys());
+        ItemDedupe.apply(items, HideDuplicated::copyKeysOf);
         return out;
     }
 

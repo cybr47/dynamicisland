@@ -3,10 +3,7 @@ package dev.android.dynamicisland.xposed.hooks;
 import static org.junit.Assert.*;
 import android.app.Activity;
 import android.app.Notification;
-import android.app.PendingIntent;
-import android.app.Person;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -184,25 +181,5 @@ public class StockPopupStyleTest {
         Bitmap bitmap=Bitmap.createBitmap(360,160,Bitmap.Config.ARGB_8888);surface.draw(new Canvas(bitmap));
         assertEquals(90,Color.alpha(bitmap.getPixel(180,80)));
         state.restore();assertSame(colors,action.getTextColors());
-    }
-
-    @Test public void disabledIncomingCallCardDoesNotClaimNativeSamsungCallInSystemPopupStyleMode() {
-        PendingIntent pi=PendingIntent.getBroadcast(context,0,new Intent("act"),PendingIntent.FLAG_IMMUTABLE);
-        Notification callNote=new Notification.Builder(context,"calls")
-                .setSmallIcon(android.R.drawable.stat_sys_phone_call)
-                .setCategory(Notification.CATEGORY_CALL)
-                .setOngoing(true)
-                .setStyle(Notification.CallStyle.forIncomingCall(new Person.Builder().setName("Caller").build(),pi,pi))
-                .build();
-        row.mEntryAdapter.mSbn=new StatusBarNotification("com.samsung.android.incallui","com.samsung.android.incallui",
-                1,null,10001,1,0,callNote,android.os.Process.myUserHandle(),System.currentTimeMillis());
-
-        preferences.edit().putBoolean(ModuleSettings.KEY_SHOW_INCOMING_CALL_CARD,false).commit();
-        ModuleSettings.configurePreview(preferences);
-        StockPopupStyle.refresh();
-        assertFalse("native Samsung incoming call must not be claimed by StockPopupStyle when show_incoming_call_card is false",
-                state.active);
-        assertFalse(StockPopupStyle.isShowing(row.mEntryAdapter.mSbn.getKey()));
-        assertSame(background,originalHead.getBackground());
     }
 }

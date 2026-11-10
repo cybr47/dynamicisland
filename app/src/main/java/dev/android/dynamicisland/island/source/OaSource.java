@@ -5,7 +5,6 @@ import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import dev.android.dynamicisland.island.detect.CallDetector;
 import dev.android.dynamicisland.island.model.IslandItem;
 import dev.android.dynamicisland.xposed.XLog;
 import dev.android.dynamicisland.settings.ModuleSettings;
@@ -116,12 +115,11 @@ public final class OaSource {
             if (a.isMedia() || a.key == null || a.pkg == null) {
                 return order;
             }
-            String target = a.targetPackage();
-            String appPkg = target != null ? target : a.pkg;
-            if (a.isGroupSummary() || (a.isNowBarStyle() && !ModuleSettings.experimentalRecovery())
-                    || a.isCallStyle() || isCallActivity(a, appPkg) || a.isDemoted()) {
+            if (a.isGroupSummary() || (a.isNowBarStyle() && !ModuleSettings.experimentalRecovery()) || a.isCallStyle() || a.isDemoted()) {
                 return order;
             }
+            String target = a.targetPackage();
+            String appPkg = target != null ? target : a.pkg;
             packages.add(a.pkg);
             if (target != null) {
                 packages.add(target);
@@ -161,41 +159,13 @@ public final class OaSource {
         if (a.isMedia() || a.pkg == null || (a.isNowBarStyle() && !ModuleSettings.experimentalRecovery())) {
             return null;
         }
-        String target = a.targetPackage();
-        String appPkg = target != null ? target : a.pkg;
         Notification n = a.notification;
         boolean handledElsewhere = n != null && (a.isGroupSummary() || a.isCallStyle()
                 || n.extras.containsKey("android.mediaSession"));
-        if (handledElsewhere || OaCardBuilder.kindOf(n, appPkg) == IslandItem.Kind.CALL || isCallActivity(a, appPkg)) {
+        if (handledElsewhere || OaCardBuilder.kindOf(n, a.pkg) == IslandItem.Kind.CALL) {
             return null;
         }
         return cards.cardFor(a);
-    }
-
-    private static boolean isCallActivity(OaActivity a, String appPkg) {
-        if (CallDetector.NATIVE_PACKAGES.contains(a.pkg)
-                || (appPkg != null && CallDetector.NATIVE_PACKAGES.contains(appPkg))) {
-            return true;
-        }
-        if (a.notification != null && a.notification.extras != null) {
-            if (a.notification.extras.getInt("android.callType", -1) > 0
-                    || IncomingCallSource.hasAnswerAndDecline(a.notification)) {
-                return true;
-            }
-        }
-        if (Refl.getBool(a.data, "mNowbarCallChronometerWithText", false)) {
-            return true;
-        }
-        Object actions = Refl.get(a.data, "mActions");
-        if (actions instanceof List) {
-            for (Object o : (List<?>) actions) {
-                if (o instanceof Notification.Action && ((Notification.Action) o).title != null
-                        && ActionWords.isAnswer(((Notification.Action) o).title)) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /** Fills the segments, milestones and progress of an Android 16 ProgressStyle notification. */

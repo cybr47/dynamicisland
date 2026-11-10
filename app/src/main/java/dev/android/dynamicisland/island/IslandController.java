@@ -90,6 +90,8 @@ public final class IslandController implements IslandHost, IslandWindow.Listener
         placement = new IslandPlacement(ctx, main, classLoader, this, this, audio);
         headsUp = new HeadsUpTakeover(sources, placement, this::refreshNow);
         callPopup = new SamsungCallPopupTakeover(ctx, main);
+        // Island's incoming-call card off: Samsung's own window owns the call until it is answered or ends.
+        callPopup.holdWhile(() -> !ModuleSettings.showIncomingCallCard() && sources.incoming.phoneRinging());
         shadeWatch = new ShadeWatch(main, () -> {
             IslandView current = placement.view();
             return current == null ? null : new ShadeWatch.Target() {

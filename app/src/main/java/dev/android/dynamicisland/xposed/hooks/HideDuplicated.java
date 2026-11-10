@@ -12,9 +12,6 @@ import android.os.SystemClock;
 import android.service.notification.StatusBarNotification;
 import de.robv.android.xposed.XC_MethodHook;
 import dev.android.dynamicisland.island.IslandController;
-import dev.android.dynamicisland.island.detect.CallDetector;
-import dev.android.dynamicisland.island.source.IncomingCallSource;
-import dev.android.dynamicisland.settings.ModuleSettings;
 import dev.android.dynamicisland.xposed.Refl;
 import dev.android.dynamicisland.xposed.SafeHook;
 import dev.android.dynamicisland.xposed.XLog;
@@ -367,11 +364,6 @@ public final class HideDuplicated {
     private static boolean shouldHide(Object entry) {
         StatusBarNotification sbn = sbn(entry);
         if (sbn == null || LIVEBRIDGE_PKG.equals(sbn.getPackageName())) {
-            return false;
-        }
-        if (!ModuleSettings.showIncomingCallCard()
-                && CallDetector.NATIVE_PACKAGES.contains(sbn.getPackageName())
-                && IncomingCallSource.isIncomingCallNotification(sbn)) {
             return false;
         }
         if (isLiveSummary(sbn.getNotification())) {
