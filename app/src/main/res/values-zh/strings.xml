@@ -520,6 +520,8 @@
     <string name="low_performance_static_wave">静态波形（低性能模式）</string>
     <string name="low_performance_details">内容模糊改为交叉淡化，卡片背景模糊改为不透明黑色。音乐效果保留静态专辑色调和静止封面。波形静止并停止音频分析。动态图标显示结束帧，同时继续反映电量等实际状态。持续动画最高 30fps，触摸反馈及展开/收起最高 60fps。\n\n保留原有单项设置，关闭此模式后恢复应用。通知、通话、计时器和音乐控制继续工作。此选项默认关闭。</string>
     <string name="pill_outline">胶囊轮廓线</string>
+    <string name="pill_roundness">胶囊圆角</string>
+    <string name="pill_roundness_summary">在圆角矩形与默认胶囊形状之间滑动调节。</string>
     <string name="pill_outline_desc">自动模式仅在胶囊与实际背景的对比度较低时显示轮廓线。</string>
     <string name="notch_style">刘海样式</string>
     <string name="notch_style_desc">将小药丸绘制成从屏幕上边缘垂下的形状（顶部平直，仅下方圆角），与刘海融为一体。iMotion 中不适用。</string>

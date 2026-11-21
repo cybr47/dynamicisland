@@ -1111,8 +1111,8 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
         notifyHost();
     }
 
-    void drawCompactGlow(Canvas canvas,RectF bounds,float alpha) {
-        pillPainter.drawCompactGlow(canvas,bounds,alpha);
+    void drawCompactGlow(Canvas canvas,RectF bounds,float radius,float alpha) {
+        pillPainter.drawCompactGlow(canvas,bounds,radius,alpha);
     }
 
     // ---- drawing -------------------------------------------------------------------------------------------------

@@ -77,11 +77,15 @@ public final class AmbientGlow {
             this.colour = colour;
             tint.setColorFilter(new PorterDuffColorFilter(colour | 0xFF000000, PorterDuff.Mode.SRC_IN));
         }
-        drawMask(canvas, body, alpha, strength, 1, false);
+        drawMask(canvas, body, body.height() / 2, alpha, strength, 1, false);
     }
 
     /** A continuous close-colour field multiplied by the same cached halo mask; no full-size blur. */
     public void draw(Canvas canvas, RectF body, GlowMotion motion, float alpha, int strength) {
+        draw(canvas, body, body.height() / 2, motion, alpha, strength);
+    }
+
+    void draw(Canvas canvas, RectF body, float radius, GlowMotion motion, float alpha, int strength) {
         if (body.isEmpty() || alpha <= .001f || strength <= 0) return;
         prepare();
         int a = motion.colour(0), b = motion.colour(1), c = motion.colour(2);
@@ -94,10 +98,10 @@ public final class AmbientGlow {
         flowMatrix.setScale(period, 1);
         flowMatrix.postTranslate(body.left - period * motion.phase(), 0);
         gradient.setLocalMatrix(flowMatrix);
-        drawMask(canvas, body, alpha * motion.opacity(), strength, motion.spread(), true);
+        drawMask(canvas, body, radius, alpha * motion.opacity(), strength, motion.spread(), true);
     }
 
-    private void drawMask(Canvas canvas, RectF body, float alpha, int strength, float spread, boolean flow) {
+    private void drawMask(Canvas canvas, RectF body, float radius, float alpha, int strength, float spread, boolean flow) {
         // Perceptual intensity: the reference is a visible diffuse halo, not just a brighter one-pixel rim.
         float intensity = (float) Math.sqrt(Math.min(100, strength) / 100f);
         Paint paint = flow ? flowPaint : tint;
@@ -109,7 +113,7 @@ public final class AmbientGlow {
         float side = Math.min((right - left) / 2, extra + body.height() / 2);
         int save = canvas.save();
         cutout.reset();
-        cutout.addRoundRect(body, body.height() / 2, body.height() / 2, Path.Direction.CW);
+        cutout.addRoundRect(body, radius, radius, Path.Direction.CW);
         canvas.clipOutPath(cutout);
         slice(canvas, 0, cap, left, top, left + side, bottom, flow);
         if (right - left > side * 2) slice(canvas, cap, cap + 2, left + side, top, right - side, bottom, flow);

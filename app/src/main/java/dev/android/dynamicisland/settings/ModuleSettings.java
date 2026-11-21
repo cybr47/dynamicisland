@@ -77,6 +77,8 @@ public final class ModuleSettings {
     public static final int PILL_OUTLINE_AUTO = 0;
     public static final int PILL_OUTLINE_ALWAYS = 1;
     public static final int PILL_OUTLINE_NONE = 2;
+    public static final String KEY_PILL_ROUNDNESS = "pill_roundness";
+    public static final int PILL_ROUNDNESS_MAX = 100;
     /** The blur while the island opens and closes: automatic (off while the phone stutters), always on, or off. */
     public static final String KEY_TRANSITION_BLUR = "transition_blur";
     public static final int TRANSITION_BLUR_AUTO = 0;
@@ -258,6 +260,7 @@ public final class ModuleSettings {
     private static volatile int transitionBlurMode = TRANSITION_BLUR_AUTO;
     private static volatile int cardCornerRadiusDp = 28;
     private static volatile boolean customCardRoundness;
+    private static volatile int pillRoundness = PILL_ROUNDNESS_MAX;
     private static volatile int pillXDp;
     private static volatile int pillYDp;
     /** Told (on the reload thread) when the island's position settings changed. */
@@ -859,6 +862,14 @@ public final class ModuleSettings {
     public static int holeTextPaddingDp() { ensureStarted(); return holeTextPaddingDp; }
     public static int cardCornerRadiusDp() { ensureStarted(); return cardCornerRadiusDp; }
     public static boolean customCardRoundness() { ensureStarted(); return customCardRoundness; }
+    public static int pillRoundness() { ensureStarted(); return pillRoundness; }
+
+    static int readPillRoundness(SharedPreferences source) {
+        return Math.max(0, Math.min(PILL_ROUNDNESS_MAX, source.getInt(KEY_PILL_ROUNDNESS, PILL_ROUNDNESS_MAX)));
+    }
+
+    /** Updates the settings-process preview while the slider is being dragged. */
+    static void previewPillRoundness(int amount) { pillRoundness = amount; }
 
     private static int clampHoleTextPadding(int value) {
         return Math.max(0, Math.min(HOLE_TEXT_PADDING_MAX_DP, value));
@@ -867,6 +878,7 @@ public final class ModuleSettings {
     private static void readOptionalDeviceSettings(SharedPreferences source) {
         customCardRoundness = source.getBoolean(KEY_CUSTOM_CARD_ROUNDNESS, false);
         cardCornerRadiusDp = Math.max(0, Math.min(48, source.getInt(KEY_CARD_CORNER_RADIUS_DP, 28)));
+        pillRoundness = readPillRoundness(source);
         stockChargingAnimation = source.getBoolean(KEY_STOCK_CHARGING_ANIMATION, false);
         wideChargingPopup = source.getBoolean(KEY_WIDE_CHARGING_POPUP, true);
         concurrentRecordingInput = source.getBoolean(KEY_CONCURRENT_RECORDING_INPUT, false);
@@ -923,7 +935,7 @@ public final class ModuleSettings {
         return "" + ambientGlow + glowAlbum + glowFollowTheme + glowStrength + "/motion=" + glowMotion + "/musicOnly=" + glowMusicOnly + "/" + glowColour + lowPerformance + "/light=" + stillMusic + staticWaveform + limitFrameRate + stillIcons + foregroundNotifications + autoOpenCards + autoOpenS + experimentalRecovery + compactEventIcons + hideBatteryIcon + accentCustom + accentColor + "/system=" + accentSystem + systemAccent + eventCharging + eventRinger + eventBluetooth + eventToggles + torchPill + "/torchStyle=" + torchStyle + headsUpIsland + allNotifications + systemPopupStyle + progressNotifications + hideProgressOriginals
                 + smartRules + privacyIndicator + privacyLocation + privacyInApp + otpCard + otpAutoCopy + thirdPartyCalls + "/incomingCalls=" + incomingCallCards + "/screenRecording=" + screenRecordingCard + visualizer + colorIcons + shadeMedia + cardHeader
                 + "/devices=" + chargingInfo + "/" + chargingStats + "/" + eventHeadset + "/" + headsetStay + "/hotspot=" + hotspotCard + "/unlock=" + unlockNotice + "/peekProgress=" + peekProgress + "/peekPullButtons=" + peekPullButtons + "/progressForeground=" + progressForeground + "/progressAny=" + progressAny + "/stockCharging=" + stockChargingAnimation + "/recordingInput=" + concurrentRecordingInput
-                + "/alwaysVisible=" + alwaysVisible + "/notch=" + notchStyle + "/popup=" + popupSeconds + "/chargingText=" + chargingText + "/swipeUpHides=" + swipeUpHides + "/swipeDownOpens=" + swipeDownOpens + "/iMotion=" + iMode + "/material=" + materialStyle + "/roundness=" + customCardRoundness + "/" + cardCornerRadiusDp + "/outline=" + pillOutlineMode + "/blur=" + transitionBlurMode + "/" + appFilter.onlyListed() + appFilter.size();
+                + "/alwaysVisible=" + alwaysVisible + "/notch=" + notchStyle + "/popup=" + popupSeconds + "/chargingText=" + chargingText + "/swipeUpHides=" + swipeUpHides + "/swipeDownOpens=" + swipeDownOpens + "/iMotion=" + iMode + "/material=" + materialStyle + "/roundness=" + customCardRoundness + "/" + cardCornerRadiusDp + "/pillRoundness=" + pillRoundness + "/outline=" + pillOutlineMode + "/blur=" + transitionBlurMode + "/" + appFilter.onlyListed() + appFilter.size();
     }
 
     /** One line in the event log whenever the values the module runs on differ from the last read. */

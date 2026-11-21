@@ -14,6 +14,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.net.Uri;
 import android.provider.Settings;
 import android.app.LocaleManager;
@@ -22,12 +23,14 @@ import android.view.Window;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import dev.android.dynamicisland.R;
 import dev.android.dynamicisland.island.rules.RuleDictionary;
 import dev.android.dynamicisland.xposed.Diagnostics;
+import java.text.NumberFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -410,6 +413,7 @@ public final class SettingsActivity extends Activity {
     private void displayPage() {
         subPage(getString(R.string.ui_appearance));
         showPreview();
+        pillRoundnessSlider(ui.card(page));
         radios(R.string.anim_title, R.string.desc_animation, new int[]{R.string.anim_new, R.string.anim_legacy, R.string.imode_title},
                 new int[]{OneUi.TAG_DEFAULT, 0, OneUi.TAG_RECOMMENDED},
                 flag(ModuleSettings.KEY_I_MODE, false) ? 2 : flag(ModuleSettings.KEY_LEGACY_ANIMATION, false) ? 1 : 0, LivePreview.RING,
@@ -454,6 +458,56 @@ public final class SettingsActivity extends Activity {
         ui.linkRow(more, getString(R.string.glow_title), getString(R.string.glow_summary),
                 () -> open(() -> new AmbientGlowScreen(this, ui, prefs).open()));
         ui.linkRow(more, getString(R.string.pos_title), getString(R.string.pos_sum), () -> open(position::open));
+    }
+
+    private void pillRoundnessSlider(LinearLayout group) {
+        String title = getString(R.string.pill_roundness);
+        int maximum = ModuleSettings.PILL_ROUNDNESS_MAX;
+        int initial = ModuleSettings.readPillRoundness(prefs);
+        NumberFormat percent = NumberFormat.getPercentInstance(getResources().getConfiguration().getLocales().get(0));
+        group.setTag(title);
+        group.setPadding(ui.dp(22), ui.dp(16), ui.dp(22), ui.dp(8));
+        LinearLayout heading = new LinearLayout(this);
+        heading.addView(ui.text(title, 18, ui.textColor), new LinearLayout.LayoutParams(0, -2, 1));
+        TextView value = ui.text(percent.format(initial / (double) maximum), 15, ui.accent);
+        heading.addView(value);
+        group.addView(heading);
+        TextView summary = ui.text(getString(R.string.pill_roundness_summary), 13, ui.muted);
+        summary.setPadding(0, ui.dp(4), 0, 0);
+        group.addView(summary);
+
+        SeekBar slider = new SeekBar(this);
+        slider.setMax(maximum);
+        slider.setProgress(initial);
+        slider.setContentDescription(title);
+        slider.setProgressTintList(ColorStateList.valueOf(ui.accent));
+        slider.setThumbTintList(ColorStateList.valueOf(ui.accent));
+        group.addView(slider, new LinearLayout.LayoutParams(-1, ui.dp(48)));
+        slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            private boolean dragging;
+
+            @Override public void onStartTrackingTouch(SeekBar bar) {
+                dragging = true;
+                preview.previewPillRoundness(bar.getProgress(), true);
+            }
+
+            @Override public void onProgressChanged(SeekBar bar, int amount, boolean fromUser) {
+                value.setText(percent.format(amount / (double) maximum));
+                if (!fromUser) return;
+                if (!dragging) save(amount);
+                preview.previewPillRoundness(amount, dragging);
+            }
+
+            @Override public void onStopTrackingTouch(SeekBar bar) {
+                dragging = false;
+                save(bar.getProgress());
+                preview.previewPillRoundness(bar.getProgress(), false);
+            }
+
+            private void save(int amount) {
+                prefs.edit().putInt(ModuleSettings.KEY_PILL_ROUNDNESS, amount).apply();
+            }
+        });
     }
 
     /** A switch whose result the preview shows right away. */

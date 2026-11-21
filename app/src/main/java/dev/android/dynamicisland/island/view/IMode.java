@@ -823,11 +823,11 @@ final class IMode {
         return card!=null && !card.iModePreview && !card.iModePaging;
     }
 
-    /** The empty pill: a plain black capsule around the camera, outlined like the rest. */
+    /** The empty pill around the camera, outlined like the rest. */
     private void drawIdle(Canvas canvas) {
         idleBounds(rect);
         shadeBounds(rect,rect);
-        float radius=rect.height()/2;
+        float radius=Shapes.pillRadius(rect);
         paint.setStyle(Paint.Style.FILL); paint.setColor(Colors.BLACK);
         canvas.drawRoundRect(rect,radius,radius,paint);
         if(scene.pillOutlineOpacity()>.01f) {
@@ -863,9 +863,9 @@ final class IMode {
             if(alpha<.003f || ownsSurface(n.item.key)) continue;
             n.bounds(rect);
             shadeBounds(rect,rect);
-            view.drawCompactGlow(canvas,rect,alpha*contentAlpha);
+            float radius=Shapes.pillRadius(rect);
+            view.drawCompactGlow(canvas,rect,radius,alpha*contentAlpha);
             int save=canvas.saveLayerAlpha(rect.left-m.dp(2),rect.top-m.dp(2),rect.right+m.dp(2),rect.bottom+m.dp(2),Math.round(alpha*255));
-            float radius=rect.height()/2;
             paint.setStyle(Paint.Style.FILL); paint.setColor(Colors.BLACK);
             canvas.drawRoundRect(rect,radius,radius,paint);
             if(scene.pillOutlineOpacity()>.01f) {
@@ -874,7 +874,8 @@ final class IMode {
                     gatherMask.reset();
                     for(Node other:nodes.values()) if(other!=n && other.alpha.value()>.95f && !ownsSurface(other.item.key)) {
                         other.bounds(gatherOther);shadeBounds(gatherOther,gatherOther);
-                        outlineSurface.reset();outlineSurface.addRoundRect(gatherOther,gatherOther.height()/2,gatherOther.height()/2,Path.Direction.CW);
+                        float otherRadius=Shapes.pillRadius(gatherOther);
+                        outlineSurface.reset();outlineSurface.addRoundRect(gatherOther,otherRadius,otherRadius,Path.Direction.CW);
                         gatherMask.op(outlineSurface,Path.Op.UNION);
                     }
                     canvas.clipOutPath(gatherMask);
@@ -908,8 +909,8 @@ final class IMode {
         float gate=IslandView.clamp01(scene.springs.shadeGate.value());
         float contentAlpha=IslandView.clamp01((gate-.45f)/.4f);
         RectF bounds=new RectF();shadeBounds(frame,bounds);
-        view.drawCompactGlow(canvas,bounds,contentAlpha);
-        float radius=bounds.height()/2;
+        float radius=Shapes.pillRadius(bounds);
+        view.drawCompactGlow(canvas,bounds,radius,contentAlpha);
         paint.setStyle(Paint.Style.FILL);paint.setColor(Colors.BLACK);canvas.drawRoundRect(bounds,radius,radius,paint);
         if(scene.pillOutlineOpacity()>.01f) {
             int strokeSave=canvas.save();
@@ -917,7 +918,8 @@ final class IMode {
                 RectF other=slot==0 ? page.bubble : page.main;
                 if(!other.isEmpty()) {
                     shadeBounds(other,gatherOther);gatherMask.reset();
-                    gatherMask.addRoundRect(gatherOther,gatherOther.height()/2,gatherOther.height()/2,Path.Direction.CW);canvas.clipOutPath(gatherMask);
+                    float otherRadius=Shapes.pillRadius(gatherOther);
+                    gatherMask.addRoundRect(gatherOther,otherRadius,otherRadius,Path.Direction.CW);canvas.clipOutPath(gatherMask);
                 }
             }
             paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(m.outlineW);
@@ -960,7 +962,7 @@ final class IMode {
             float alpha=(1-progress)*density*density*IslandView.clamp01(card.iModeOpacity.value())*scene.shadeAlpha();
             // Carry the existing compact halo from the first unfolding frame to the last returning frame.
             // Its energy declines continuously as the surface grows into a full card.
-            view.drawCompactGlow(canvas,glowBounds,alpha);
+            view.drawCompactGlow(canvas,glowBounds,Shapes.pillRadius(glowBounds),alpha);
         }
         canvas.restoreToCount(save);
     }
@@ -1038,9 +1040,9 @@ final class IMode {
 
     static float corner(Card card,RectF r,float pillHeight,float maximum) {
         float progress=IslandView.clamp01((card.h.value()-pillHeight)/Math.max(1,card.body.h-pillHeight));
-        float compact=Math.min(r.width(),r.height())/2;
+        float compact=Shapes.pillRadius(r);
         float expanded=card.body.cornerRadius(maximum,card.body.h);
-        return Math.min(compact,compact+(expanded-compact)*progress);
+        return Math.min(Math.min(r.width(),r.height())/2,compact+(expanded-compact)*progress);
     }
     static float materialPower(Card card,float pillHeight) {
         float p=IslandView.clamp01((card.h.value()-pillHeight)/Math.max(1,card.body.h-pillHeight));

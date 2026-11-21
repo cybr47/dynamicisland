@@ -520,6 +520,8 @@
     <string name="low_performance_static_wave">정적인 파형 (저사양 모드)</string>
     <string name="low_performance_details">내부 요소의 블러는 부드러운 투명도 전환으로 대체합니다. 카드 배경 블러는 불투명한 검은 배경으로 바꿉니다. 음악 효과는 앨범 색상을 정적으로 표시하고 앨범 전환 효과를 멈춥니다. 파형은 정적으로 표시하며 오디오 분석을 중지합니다. 움직이는 아이콘은 완료된 모습으로 표시하되 배터리 잔량 등 실제 상태는 계속 반영합니다. 지속적인 움직임은 최대 30fps, 터치 반응과 확장·축소는 최대 60fps로 제한합니다.\n\n기존 개별 설정값은 보존하며 모드를 끄면 다시 적용합니다. 알림·통화·타이머·음악 조작은 유지됩니다. 기본값은 꺼짐입니다.</string>
     <string name="pill_outline">알약 외곽선</string>
+    <string name="pill_roundness">알약 모서리 둥글기</string>
+    <string name="pill_roundness_summary">모서리가 둥근 직사각형부터 기본 알약 모양까지 조절합니다.</string>
     <string name="pill_outline_desc">자동은 알약과 실제 배경의 대비가 낮을 때만 외곽선을 표시합니다.</string>
     <string name="notch_style">노치 스타일</string>
     <string name="notch_style_desc">작은 알약을 화면 위쪽 가장자리에 매달린 모양(윗면 평평, 아래만 둥글게)으로 그려 노치와 어우러지게 합니다. iMotion에서는 쓰이지 않습니다.</string>

@@ -3,12 +3,15 @@ package dev.android.dynamicisland.island.view;
 import static dev.android.dynamicisland.island.graphics.Easing.lerp;
 
 import android.graphics.RectF;
+import dev.android.dynamicisland.settings.ModuleSettings;
 
 /**
  * Turns the current spring values into rectangles: the pill, the split-off bubble and the cards, including
  * the squash and stretch that make them read as liquid.
  */
 final class Shapes {
+    /** Keep a small corner even at the most rectangular end of the slider. */
+    private static final float MIN_PILL_RADIUS_FRACTION = 0.2f;
     /** How much a fast change of width flattens the pill (and of height narrows it). */
     private static final float PILL_SQUASH = 0.12f;
     private static final float PILL_STRETCH = 0.06f;
@@ -34,6 +37,16 @@ final class Shapes {
 
     static float clampUnit(float v) {
         return Math.max(-1.0f, Math.min(1.0f, v));
+    }
+
+    static float pillRadius(RectF bounds) {
+        float capsuleRadius = Math.max(0, Math.min(bounds.width(), bounds.height()) / 2);
+        int roundness = ModuleSettings.pillRoundness();
+        if (roundness == ModuleSettings.PILL_ROUNDNESS_MAX) return capsuleRadius;
+        // As a pill shrinks toward a camera dot or an icon bubble, blend back to a circle.
+        float elongation = IslandView.clamp01((bounds.width() - bounds.height()) / Math.max(1, capsuleRadius));
+        float cornerFraction = lerp(MIN_PILL_RADIUS_FRACTION, 1, roundness / (float) ModuleSettings.PILL_ROUNDNESS_MAX);
+        return capsuleRadius * lerp(1, cornerFraction, elongation);
     }
 
     /** The pill. Squash and stretch: it flattens while it widens fast and narrows while it grows in height. */

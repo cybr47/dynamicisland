@@ -10,14 +10,21 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.os.SystemClock;
+import android.view.Choreographer;
+import dev.android.dynamicisland.island.model.IslandItem;
 import dev.android.dynamicisland.settings.ModuleSettings;
 import java.io.File;
+import java.time.Duration;
+import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import org.robolectric.shadows.ShadowChoreographer;
+import org.robolectric.shadows.ShadowSystemClock;
 import org.robolectric.util.ReflectionHelpers;
 
 /** Real pill painter, identical backgrounds for each mode; capture output is available in CI. */
@@ -25,6 +32,70 @@ import org.robolectric.util.ReflectionHelpers;
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = 35, qualifiers = "mdpi")
 public class PillOutlineContrastRenderTest {
+    @Test public void aSmallerRadiusFillsMoreOfBothPillCornersInEveryAnimation() {
+        Context context = RuntimeEnvironment.getApplication();
+        SharedPreferences prefs = context.getSharedPreferences("pill-roundness-render", 0);
+        ShadowChoreographer.setPaused(true);
+        ShadowChoreographer.setFrameDelay(Duration.ofMillis(16));
+        Bitmap bitmap = Bitmap.createBitmap(320, 120, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        try {
+            for (String animation : List.of("Default", "Legacy", "iMotion")) {
+                prefs.edit().clear().putBoolean(ModuleSettings.KEY_I_MODE, animation.equals("iMotion"))
+                        .putBoolean(ModuleSettings.KEY_LEGACY_ANIMATION, animation.equals("Legacy"))
+                        .putBoolean(ModuleSettings.KEY_AMBIENT_GLOW, false)
+                        .putInt(ModuleSettings.KEY_PILL_OUTLINE, ModuleSettings.PILL_OUTLINE_NONE).apply();
+                ModuleSettings.configurePreview(prefs);
+                IslandView view = new IslandView(context, IslandHost.NONE);
+                view.setGeometry(320, 160, 60, 22, false);
+                view.layout(0, 0, 320, 120);
+                IslandItem timer = new IslandItem("timer");
+                timer.title = "Timer";
+                timer.trailing = IslandItem.Trailing.TEXT;
+                timer.trailingText = "10:01";
+                view.setItems(List.of(timer));
+                for (int frame = 0; frame < 100; frame++) {
+                    ShadowSystemClock.advanceBy(Duration.ofMillis(16));
+                    view.doFrame(SystemClock.uptimeMillis() * 1_000_000L);
+                    Choreographer.getInstance().removeFrameCallback(view);
+                }
+
+                RectF bounds = new RectF();
+                view.computeMain(bounds);
+                view.draw(canvas);
+                int[] capsule = cornerPixels(bitmap, bounds);
+                prefs.edit().putInt(ModuleSettings.KEY_PILL_ROUNDNESS, 50).apply();
+                ModuleSettings.configurePreview(prefs);
+                bitmap.eraseColor(Color.TRANSPARENT);
+                view.draw(canvas);
+                int[] round = cornerPixels(bitmap, bounds);
+                prefs.edit().putInt(ModuleSettings.KEY_PILL_ROUNDNESS, 0).apply();
+                ModuleSettings.configurePreview(prefs);
+                bitmap.eraseColor(Color.TRANSPARENT);
+                view.draw(canvas);
+                int[] rectangular = cornerPixels(bitmap, bounds);
+                bitmap.eraseColor(Color.TRANSPARENT);
+
+                assertTrue(animation + " left corner", capsule[0] < round[0] && round[0] < rectangular[0]);
+                assertTrue(animation + " right corner", capsule[1] < round[1] && round[1] < rectangular[1]);
+                assertEquals(15f, Shapes.pillRadius(new RectF(0, 0, 30, 30)), .001f);
+            }
+        } finally {
+            prefs.edit().clear().apply();
+            ModuleSettings.configurePreview(prefs);
+        }
+    }
+
+    private static int[] cornerPixels(Bitmap bitmap, RectF bounds) {
+        int[] pixels = new int[2];
+        for (int row = 0; row < 8; row++) for (int column = 0; column < 8; column++) {
+            int y = Math.round(bounds.top) + row;
+            if (Color.alpha(bitmap.getPixel(Math.round(bounds.left) + column, y)) > 127) pixels[0]++;
+            if (Color.alpha(bitmap.getPixel(Math.round(bounds.right) - 1 - column, y)) > 127) pixels[1]++;
+        }
+        return pixels;
+    }
+
     @Test public void modesMatchActualBackgroundAndNeverChangePillInterior() throws Exception {
         Context ctx = RuntimeEnvironment.getApplication();
         SharedPreferences prefs = ctx.getSharedPreferences("outline-render", 0);

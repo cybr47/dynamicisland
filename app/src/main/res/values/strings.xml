@@ -529,6 +529,8 @@
     <string name="low_performance_static_wave">Static waveform (low-performance mode)</string>
     <string name="low_performance_details">Content blur is replaced by a crossfade. Card background blur becomes a solid black fill. Music effects use a static album-colour tint and still artwork. Waveforms become static and audio analysis stops. Animated icons use their settled frame while real state, including battery charge, stays current. Continuous animation is limited to 30 fps; touch feedback and expansion/collapse can use up to 60 fps.\n\nYour individual settings are kept and apply again when this mode is off. Notifications, calls, timers and music controls keep working. This option is off by default.</string>
     <string name="pill_outline">Pill outline</string>
+    <string name="pill_roundness">Pill roundness</string>
+    <string name="pill_roundness_summary">Slide from a rectangle with rounded corners to the default capsule.</string>
     <string name="pill_outline_desc">Auto shows an outline only when contrast between the pill and the actual background is low.</string>
     <string name="notch_style">Notch style</string>
     <string name="notch_style_desc">Draw the small pill hanging from the top edge of the screen, flat on top and rounded below, to blend with a notch. Not used in iMotion.</string>

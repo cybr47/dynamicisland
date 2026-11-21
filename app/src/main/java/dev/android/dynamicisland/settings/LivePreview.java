@@ -173,6 +173,14 @@ final class LivePreview extends FrameLayout {
         refresh(KEEP);
     }
 
+    void previewPillRoundness(int amount, boolean dragging) {
+        ModuleSettings.previewPillRoundness(amount);
+        island.collapse();
+        island.invalidate();
+        removeCallbacks(cycle);
+        if (running && !dragging) postDelayed(cycle, SAMPLE_MS);
+    }
+
     void stop() {
         running = false;
         removeCallbacks(cycle);

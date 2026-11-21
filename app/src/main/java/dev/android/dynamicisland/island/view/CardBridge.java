@@ -65,7 +65,8 @@ final class CardBridge {
         float flatHalf = Math.max(0.0f, (pill.width() / 2.0f) - pillRadius);
         float topHalf = flatHalf + (pillRadius * ROUND_END);
         float inset = topHalf - flatHalf;
-        float topY = pill.centerY() + (float) Math.sqrt(Math.max(0.0f, (pillRadius * pillRadius) - (inset * inset))) - TUCK;
+        float topY = pill.bottom - pillRadius
+                + (float) Math.sqrt(Math.max(0.0f, (pillRadius * pillRadius) - (inset * inset))) - TUCK;
         float cardCorner = first.body.cornerRadius(m.cardRadius, cardRect.height());
         float bottomHalf = Math.min(Math.max(0.0f, (cardRect.width() / 2.0f) - cardCorner), Math.max(topHalf * CARD_SPREAD, m.dp(MIN_CARD_HALF_DP)));
         LiquidBridge bridge = first.bridge;
