@@ -11,7 +11,7 @@ android {
         minSdk 35
         targetSdk 36
         versionCode 123
-        versionName providers.gradleProperty('localVersionName').getOrElse('0.1.17')
+        versionName providers.gradleProperty('localVersionName').getOrElse('0.1.17-ui-9.5-alpha1')
     }
 
     buildTypes {

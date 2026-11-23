@@ -53,6 +53,7 @@ final class StackPainter {
     private final Scene scene;
     private final Shapes shapes;
     private final Path clip = new Path();
+    private final Path cardRim = new Path();
     private final RectF inner = new RectF();
     private final RectF slot = new RectF();
     private final RectF gooUpper = new RectF();
@@ -268,9 +269,11 @@ final class StackPainter {
         // motion. Explicitly schedule its following frames even on a static card.
         if(frosted&&c.material.animating(t)&&materialFrameRequester!=null)materialFrameRequester.run();
         if(canFrost&&!frosted&&materialFrameRequester!=null)materialFrameRequester.run();
+        float contour = CompactShape.cardAmount(r, m.pillH, c.body.h);
         if (!frosted) {
+            CompactShape.path(clip, r, corner, contour);
             paints.card.setColor(fillColor(opening, blurFraction(c, opening)));
-            canvas.drawRoundRect(r, corner, corner, paints.card);
+            canvas.drawPath(clip, paints.card);
         }
         // iMotion carries its pill contrast rim in the overlay, outside native slot clipping.
         // This gradient is only the card material's own rim, which develops as the card opens.
@@ -281,10 +284,14 @@ final class StackPainter {
                 : rimShader(r, 1.0f, rimSettled, morphOutline));
         inner.set(r);
         inner.inset(m.outlineW / 2.0f, m.outlineW / 2.0f);
-        if (!frosted) canvas.drawRoundRect(inner, corner, corner, paints.cardStroke);
+        if (!frosted) {
+            CompactShape.path(cardRim, inner, corner, contour);
+            canvas.drawPath(cardRim, paints.cardStroke);
+        }
         if(c.iMode && scene.iMode!=null) {
             int compactSave=canvas.save();
-            clip.reset();clip.addRoundRect(r,corner,corner,Path.Direction.CW);canvas.clipPath(clip);
+            if (frosted) MaterialShape.path(clip, r, corner, cornerPower);
+            canvas.clipPath(clip);
             scene.iMode.drawCompactCard(canvas,c,r,t);
             canvas.restoreToCount(compactSave);
         }
@@ -293,9 +300,7 @@ final class StackPainter {
             return;
         }
         int save = canvas.save();
-        clip.reset();
-        if (frosted) MaterialShape.path(clip, r, corner,cornerPower);
-        else clip.addRoundRect(r, corner, corner, Path.Direction.CW);
+        if (frosted && (!c.iMode || scene.iMode == null)) MaterialShape.path(clip, r, corner, cornerPower);
         canvas.clipPath(clip);
         float backgroundAlpha=c.iMode && c.item.isMedia ? Easing.easeOutCubic(opening) : alpha;
         if (!frosted || !c.item.isMedia) drawBackground(c.body, canvas, r, backgroundAlpha);

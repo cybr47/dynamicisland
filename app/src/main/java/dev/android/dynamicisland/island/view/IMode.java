@@ -823,17 +823,17 @@ final class IMode {
         return card!=null && !card.iModePreview && !card.iModePaging;
     }
 
-    /** The empty pill: a plain black capsule around the camera, outlined like the rest. */
+    /** The empty bar around the camera uses the same contour as an active bar. */
     private void drawIdle(Canvas canvas) {
         idleBounds(rect);
         shadeBounds(rect,rect);
-        float radius=rect.height()/2;
+        CompactShape.path(clip, rect);
         paint.setStyle(Paint.Style.FILL); paint.setColor(Colors.BLACK);
-        canvas.drawRoundRect(rect,radius,radius,paint);
+        canvas.drawPath(clip,paint);
         if(scene.pillOutlineOpacity()>.01f) {
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(m.outlineW);
             paint.setColor(Colors.withAlpha(Colors.PILL_OUTLINE,scene.pillOutlineOpacity()));
-            canvas.drawRoundRect(rect,radius,radius,paint);
+            canvas.drawPath(clip,paint);
             paint.setStyle(Paint.Style.FILL);
         }
     }
@@ -865,26 +865,26 @@ final class IMode {
             shadeBounds(rect,rect);
             view.drawCompactGlow(canvas,rect,alpha*contentAlpha);
             int save=canvas.saveLayerAlpha(rect.left-m.dp(2),rect.top-m.dp(2),rect.right+m.dp(2),rect.bottom+m.dp(2),Math.round(alpha*255));
-            float radius=rect.height()/2;
+            CompactShape.path(clip, rect);
             paint.setStyle(Paint.Style.FILL); paint.setColor(Colors.BLACK);
-            canvas.drawRoundRect(rect,radius,radius,paint);
+            canvas.drawPath(clip,paint);
             if(scene.pillOutlineOpacity()>.01f) {
                 int strokeSave=canvas.save();
                 if(gate<.999f) {
                     gatherMask.reset();
                     for(Node other:nodes.values()) if(other!=n && other.alpha.value()>.95f && !ownsSurface(other.item.key)) {
                         other.bounds(gatherOther);shadeBounds(gatherOther,gatherOther);
-                        outlineSurface.reset();outlineSurface.addRoundRect(gatherOther,gatherOther.height()/2,gatherOther.height()/2,Path.Direction.CW);
+                        CompactShape.path(outlineSurface, gatherOther);
                         gatherMask.op(outlineSurface,Path.Op.UNION);
                     }
                     canvas.clipOutPath(gatherMask);
                 }
                 paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(m.outlineW);
                 paint.setColor(Colors.withAlpha(Colors.PILL_OUTLINE,scene.pillOutlineOpacity()));
-                canvas.drawRoundRect(rect,radius,radius,paint);paint.setStyle(Paint.Style.FILL);
+                canvas.drawPath(clip,paint);paint.setStyle(Paint.Style.FILL);
                 canvas.restoreToCount(strokeSave);
             }
-            clip.reset();clip.addRoundRect(rect,radius,radius,Path.Direction.CW);canvas.clipPath(clip);
+            canvas.clipPath(clip);
             float role=IslandView.clamp01(n.iconOnly.value());
             float speed=Math.max(Math.max(Math.abs(n.x.velocity()),Math.abs(n.y.velocity())),
                     Math.max(Math.abs(n.w.velocity()),Math.abs(n.h.velocity())));
@@ -909,23 +909,24 @@ final class IMode {
         float contentAlpha=IslandView.clamp01((gate-.45f)/.4f);
         RectF bounds=new RectF();shadeBounds(frame,bounds);
         view.drawCompactGlow(canvas,bounds,contentAlpha);
-        float radius=bounds.height()/2;
-        paint.setStyle(Paint.Style.FILL);paint.setColor(Colors.BLACK);canvas.drawRoundRect(bounds,radius,radius,paint);
+        CompactShape.path(clip, bounds);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(Colors.BLACK);canvas.drawPath(clip,paint);
         if(scene.pillOutlineOpacity()>.01f) {
             int strokeSave=canvas.save();
             if(gate<.999f) {
                 RectF other=slot==0 ? page.bubble : page.main;
                 if(!other.isEmpty()) {
-                    shadeBounds(other,gatherOther);gatherMask.reset();
-                    gatherMask.addRoundRect(gatherOther,gatherOther.height()/2,gatherOther.height()/2,Path.Direction.CW);canvas.clipOutPath(gatherMask);
+                    shadeBounds(other,gatherOther);
+                    CompactShape.path(gatherMask, gatherOther);
+                    canvas.clipOutPath(gatherMask);
                 }
             }
             paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(m.outlineW);
             paint.setColor(Colors.withAlpha(Colors.PILL_OUTLINE,scene.pillOutlineOpacity()));
-            canvas.drawRoundRect(bounds,radius,radius,paint);paint.setStyle(Paint.Style.FILL);
+            canvas.drawPath(clip,paint);paint.setStyle(Paint.Style.FILL);
             canvas.restoreToCount(strokeSave);
         }
-        int save=canvas.save();clip.reset();clip.addRoundRect(bounds,radius,radius,Path.Direction.CW);canvas.clipPath(clip);
+        int save=canvas.save();canvas.clipPath(clip);
         float p=IslandView.clamp01(page.progress.value());
         boolean unchanged=page.from.get(slot).item.key.equals(page.to.get(slot).item.key);
         float blur=Math.max(1-contentAlpha,unchanged ? 0 : 4*p*(1-p)*.65f);
@@ -949,7 +950,9 @@ final class IMode {
         for(Card card:scene.cards) {
             view.computeCard(card,glowBounds);
             float corner=corner(card,glowBounds,m.pillH,m.cardRadius);
-            glowExclusion.addRoundRect(glowBounds,corner,corner,Path.Direction.CW);
+            float amount = CompactShape.cardAmount(glowBounds, m.pillH, card.body.h);
+            CompactShape.path(outlineSurface, glowBounds, corner, amount);
+            glowExclusion.addPath(outlineSurface);
         }
         // This layer is above native card slots. A halo must never tint their opaque foregrounds.
         canvas.clipOutPath(glowExclusion);
@@ -976,7 +979,10 @@ final class IMode {
             float corner=corner(card,outlineBounds,m.pillH,m.cardRadius);
             boolean frosted=dev.android.dynamicisland.island.material.FrostedSurface.requested();
             if(frosted) dev.android.dynamicisland.island.material.MaterialShape.path(outlineSurface,outlineBounds,corner,materialPower(card,m.pillH));
-            else { outlineSurface.reset();outlineSurface.addRoundRect(outlineBounds,corner,corner,Path.Direction.CW); }
+            else {
+                float amount = CompactShape.cardAmount(outlineBounds, m.pillH, card.body.h);
+                CompactShape.path(outlineSurface, outlineBounds, corner, amount);
+            }
             float opening=IslandView.clamp01((card.h.value()-m.pillH)/Math.max(1,card.body.h-m.pillH));
             // A material's intrinsic rim is separate from this pill contrast outline. Keep the
             // latter on the same exterior contour before, during and after the native card slot.
