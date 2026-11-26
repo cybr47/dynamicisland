@@ -445,11 +445,19 @@ public final class IslandWindow {
         try {
             Display display = context.getDisplay();
             DisplayCutout cutout = display != null ? display.getCutout() : null;
-            if (cutout != null) return cutout;
+            if (cutout != null && !cutout.getBoundingRects().isEmpty()) return cutout;
         } catch (Throwable ignored) {
-            // fall back to the window insets below
+            // Some display contexts do not expose a cutout directly.
         }
-        return cutout();
+        try {
+            // Window metrics describe the entire display area, unlike the insets of our narrow edge overlay.
+            DisplayCutout cutout = windowManager.getCurrentWindowMetrics().getWindowInsets().getDisplayCutout();
+            if (cutout != null && !cutout.getBoundingRects().isEmpty()) return cutout;
+        } catch (Throwable ignored) {
+            // Older vendor implementations may not expose cutouts through window metrics.
+        }
+        // Once turned, local inset coordinates are no longer screen coordinates (especially on the right).
+        return side == SIDE_NONE ? cutout() : null;
     }
 
     int rotation() {

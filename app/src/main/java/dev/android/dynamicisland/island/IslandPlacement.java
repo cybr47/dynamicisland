@@ -416,9 +416,10 @@ final class IslandPlacement {
         landscapeSuppressed = false; // the option exists because the island is wanted here
         view.setPillSize(ModuleSettings.pillHeightPercent(), ModuleSettings.pillMinWidthDp(), ModuleSettings.pillMaxWidthDp());
         view.setHoleTextPadding(ModuleSettings.holeTextPaddingDp());
+        // Geometry updates can request a window resize synchronously; publish the new edge centre first.
+        sidewaysCentreY = centre[1];
         view.setGeometry(height, centre[0], centre[1], holeD, false);
         view.setHoleMarker(-1.0f, 0.0f, 0.0f);
-        sidewaysCentreY = centre[1];
         applyWindowHeight();
         updateSuppression();
         return true;

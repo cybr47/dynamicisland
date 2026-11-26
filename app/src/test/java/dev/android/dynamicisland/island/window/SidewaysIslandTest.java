@@ -116,6 +116,18 @@ public class SidewaysIslandTest {
         assertFalse("where the pill is upright is not where it is now", region.contains(140, 25));
     }
 
+    @Test public void rightEdgeTouchesFollowTheTurnedCard() {
+        IslandWindow window = window();
+        window.setSideways(IslandWindow.SIDE_RIGHT);
+        layout(window, EXTENT, SCREEN_H);
+        Region region = new Region(50, 10, 310, 100);
+        ReflectionHelpers.callInstanceMethod(window, "toWindow",
+                ReflectionHelpers.ClassParameter.from(Region.class, region));
+        assertEquals(new Rect(EXTENT - 100, 50, EXTENT - 10, 310), region.getBounds());
+        assertTrue(region.contains(EXTENT - 55, 180));
+        assertFalse(region.contains(5, 180));
+    }
+
     @Test public void theCentreComesFromTheHoleOnTheEdge() {
         float[] left = IslandPlacementProbe.sidewaysCentre(IslandWindow.SIDE_LEFT, new Rect(20, 160, 50, 190), SCREEN_W, SCREEN_H);
         assertEquals("along the edge, from the bottom up", SCREEN_H - 175, left[0], 0.01);

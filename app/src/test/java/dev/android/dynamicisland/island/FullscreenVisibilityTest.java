@@ -104,6 +104,17 @@ public class FullscreenVisibilityTest {
         ModuleSettings.configurePreview(prefs);
         placement.updateGeometry();
         assertFalse("shown in landscape", view.isSuppressedNow());
+        assertTrue("camera following is enabled by default with landscape visibility", ModuleSettings.landscapeAtCamera());
+        Switch atCamera = findSwitch(activity.findViewById(android.R.id.content),
+                activity.getString(R.string.setting_landscape_at_camera));
+        assertNotNull(atCamera);
+        assertTrue(atCamera.isChecked());
+        atCamera.performClick();
+        ModuleSettings.configurePreview(prefs);
+        assertFalse("the existing manual opt-out remains available", ModuleSettings.landscapeAtCamera());
+        atCamera.performClick();
+        ModuleSettings.configurePreview(prefs);
+        assertTrue(ModuleSettings.landscapeAtCamera());
         placement.setStatusBarWindowState(2);
         assertFalse("shown in a landscape full-screen game", view.isSuppressedNow());
         placement.setBarState(1);

@@ -772,7 +772,7 @@ public final class ModuleSettings {
             boolean atCameraBefore = landscapeAtCamera;
             showInFullscreen = source.getBoolean(KEY_SHOW_IN_FULLSCREEN, false);
             showInLandscape = source.getBoolean(KEY_SHOW_IN_LANDSCAPE, false);
-            landscapeAtCamera = source.getBoolean(KEY_LANDSCAPE_AT_CAMERA, false);
+            landscapeAtCamera = source.getBoolean(KEY_LANDSCAPE_AT_CAMERA, true);
             boolean previewBefore = placementPreviewActive();
             previewWallUntil = source.getLong(KEY_PILL_PREVIEW_UNTIL, 0L);
             if (!placementPreviewActive()) {
@@ -876,7 +876,7 @@ public final class ModuleSettings {
         torchStyle = settings.getInt(KEY_TORCH_STYLE, 0) == 1 ? 1 : 0;
         showInFullscreen = settings.getBoolean(KEY_SHOW_IN_FULLSCREEN, false);
         showInLandscape = settings.getBoolean(KEY_SHOW_IN_LANDSCAPE, false);
-        landscapeAtCamera = settings.getBoolean(KEY_LANDSCAPE_AT_CAMERA, false);
+        landscapeAtCamera = settings.getBoolean(KEY_LANDSCAPE_AT_CAMERA, true);
         eventCharging = settings.getBoolean(KEY_EVENT_CHARGING, true);
         readOptionalDeviceSettings(settings);
         holeTextPaddingDp = clampHoleTextPadding(settings.getInt(KEY_HOLE_TEXT_PADDING_DP, 0));
