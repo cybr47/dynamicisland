@@ -41,7 +41,7 @@ final class Paints {
         stroke.setStrokeCap(Paint.Cap.ROUND);
 
         applyFonts();
-        trail.setTextSize(sp(14.5f));
+        setStyle(false);
         trail.setFontFeatureSettings("tnum");
         small.setTextSize(sp(12.0f));
         small.setFontFeatureSettings("tnum");
@@ -54,6 +54,10 @@ final class Paints {
         bigTime.setColor(Colors.WHITE);
         button.setTextSize(sp(14.0f));
         button.setTextAlign(Paint.Align.CENTER);
+    }
+
+    void setStyle(boolean oneDesign) {
+        trail.setTextSize(oneDesign ? TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 12f, display) : sp(14.5f));
     }
 
     private static TextPaint text() {

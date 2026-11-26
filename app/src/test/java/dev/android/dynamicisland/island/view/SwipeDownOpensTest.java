@@ -313,6 +313,8 @@ public class SwipeDownOpensTest {
     @Test public void theSplitOffSubPillPullsTheCardsOpenToo() {
         Context context = RuntimeEnvironment.getApplication();
         SharedPreferences prefs = stackPrefs(context, "pull-bubble");
+        prefs.edit().putInt(ModuleSettings.KEY_ISLAND_STYLE, ModuleSettings.STYLE_ONE_DESIGN).commit();
+        ModuleSettings.configurePreview(prefs);
         try {
             IslandView view = view(context);
             Scene scene = ReflectionHelpers.getField(view, "scene");
@@ -327,18 +329,18 @@ public class SwipeDownOpensTest {
             items.add(second);
             view.setItems(items);
             step(view, 160);
-            assertTrue("a sub pill exists", scene.secondary != null);
             Shapes shapes = ReflectionHelpers.getField(view, "shapes");
-            RectF main = new RectF(), bubble = new RectF();
+            RectF main = new RectF(), handle = new RectF();
             shapes.paintedMain(main);
-            shapes.bubble(main, bubble);
+            shapes.handle(main, 1, handle);
+            assertFalse("a right handle exists", handle.isEmpty());
             long down = SystemClock.uptimeMillis();
-            touchAt(view, MotionEvent.ACTION_DOWN, down, down, bubble.centerX(), bubble.centerY());
-            touchAt(view, MotionEvent.ACTION_MOVE, down, down + 40, bubble.centerX(), bubble.centerY() + 30);
-            touchAt(view, MotionEvent.ACTION_MOVE, down, down + 80, bubble.centerX(), bubble.centerY() + 70);
+            touchAt(view, MotionEvent.ACTION_DOWN, down, down, handle.centerX(), handle.centerY());
+            touchAt(view, MotionEvent.ACTION_MOVE, down, down + 40, handle.centerX(), handle.centerY() + 30);
+            touchAt(view, MotionEvent.ACTION_MOVE, down, down + 80, handle.centerX(), handle.centerY() + 70);
             assertEquals("the pull on the sub pill opens the cards", Mode.EXPANDED, scene.mode);
             assertEquals(0, shadePulls.size());
-            touchAt(view, MotionEvent.ACTION_UP, down, down + 100, bubble.centerX(), bubble.centerY() + 120);
+            touchAt(view, MotionEvent.ACTION_UP, down, down + 100, handle.centerX(), handle.centerY() + 120);
             step(view, 120);
             assertEquals(Mode.EXPANDED, scene.mode);
             assertEquals("both cards are shown", 2, scene.cards.stream().filter(c -> !c.leaving).count());

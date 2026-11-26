@@ -25,6 +25,13 @@ public final class ModuleSettings {
     public static final String KEY_CARD_HEADER = "card_header";
     public static final String KEY_VISUALIZER = "visualizer";
     public static final String KEY_COLOR_ICONS = "compact_color_icons";
+    public static final String KEY_ISLAND_STYLE = "island_style";
+    public static final int STYLE_PILL = 0, STYLE_ONE_DESIGN = 1;
+    public static final String KEY_WIDER_ALBUM_COVER = "wider_album_cover";
+    public static final String KEY_APP_ICON_ZOOM = "app_icon_zoom";
+    static final int APP_ICON_ZOOM_MIN = 50;
+    static final int APP_ICON_ZOOM_MAX = 150;
+    private static final int APP_ICON_ZOOM_DEFAULT = 100;
     /** The island's music card in place of the stock music player of the notification shade. */
     public static final String KEY_SHADE_MEDIA = "shade_media_player";
     public static final String KEY_EVENT_CHARGING = "event_charging";
@@ -214,6 +221,9 @@ public final class ModuleSettings {
     private static volatile boolean cardHeader = true;
     private static volatile boolean visualizer = true;
     private static volatile boolean colorIcons;
+    private static volatile int islandStyle = STYLE_PILL;
+    private static volatile boolean widerAlbumCover;
+    private static volatile int appIconZoom = APP_ICON_ZOOM_DEFAULT;
     private static volatile boolean shadeMedia = true;
     private static volatile boolean eventCharging = true;
     private static volatile boolean stockChargingAnimation;
@@ -717,6 +727,9 @@ public final class ModuleSettings {
             cardHeader = source.getBoolean(KEY_CARD_HEADER, true);
             visualizer = source.getBoolean(KEY_VISUALIZER, true);
             colorIcons = source.getBoolean(KEY_COLOR_ICONS, false);
+            islandStyle = readIslandStyle(source);
+            widerAlbumCover = source.getBoolean(KEY_WIDER_ALBUM_COVER, false);
+            appIconZoom = readAppIconZoom(source);
             shadeMedia = source.getBoolean(KEY_SHADE_MEDIA, true);
             eventCharging = source.getBoolean(KEY_EVENT_CHARGING, true);
             readOptionalDeviceSettings(source);
@@ -869,6 +882,9 @@ public final class ModuleSettings {
         holeTextPaddingDp = clampHoleTextPadding(settings.getInt(KEY_HOLE_TEXT_PADDING_DP, 0));
         cardHeader = settings.getBoolean(KEY_CARD_HEADER, true);
         colorIcons = settings.getBoolean(KEY_COLOR_ICONS, false);
+        islandStyle = readIslandStyle(settings);
+        widerAlbumCover = settings.getBoolean(KEY_WIDER_ALBUM_COVER, false);
+        appIconZoom = readAppIconZoom(settings);
         accentCustom = settings.getBoolean(KEY_ACCENT_CUSTOM, false);
         accentColor = settings.getInt(KEY_ACCENT_COLOR, DEFAULT_ACCENT) | 0xFF000000;
         accentSystem = settings.getBoolean(KEY_ACCENT_SYSTEM, false);
@@ -1017,7 +1033,8 @@ public final class ModuleSettings {
         return "" + ambientGlow + glowAlbum + glowFollowTheme + glowStrength + "/motion=" + glowMotion + "/musicOnly=" + glowMusicOnly + "/" + glowColour + lowPerformance + "/light=" + stillMusic + staticWaveform + limitFrameRate + stillIcons + foregroundNotifications + autoOpenCards + autoOpenS + experimentalRecovery + compactEventIcons + hideBatteryIcon + accentCustom + accentColor + "/system=" + accentSystem + systemAccent + eventCharging + eventRinger + eventBluetooth + eventToggles + torchPill + "/torchStyle=" + torchStyle + headsUpIsland + allNotifications + silentNotificationCards + systemPopupStyle + progressNotifications + hideProgressOriginals
                 + smartRules + privacyIndicator + privacyLocation + privacyInApp + otpCard + otpAutoCopy + thirdPartyCalls + "/incomingCalls=" + incomingCallCards + "/screenRecording=" + screenRecordingCard + visualizer + colorIcons + shadeMedia + cardHeader
                 + "/devices=" + chargingInfo + "/" + chargingStats + "/" + eventHeadset + "/" + headsetStay + "/hotspot=" + hotspotCard + "/unlock=" + unlockNotice + "/" + unlockIconOnly + "/peekProgress=" + peekProgress + "/peekPullButtons=" + peekPullButtons + "/progressForeground=" + progressForeground + "/progressAny=" + progressAny + "/stockCharging=" + stockChargingAnimation + "/" + chargingPercentInRing + "/recordingInput=" + concurrentRecordingInput
-                + "/alwaysVisible=" + alwaysVisible + "/notch=" + notchStyle + "/popup=" + popupSeconds + "/chargingText=" + chargingText + "/swipeUpHides=" + swipeUpHides + "/swipeDownOpens=" + swipeDownOpens + "/iMotion=" + iMode + "/material=" + materialStyle + "/roundness=" + customCardRoundness + "/" + cardCornerRadiusDp + "/outline=" + pillOutlineMode + "/blur=" + transitionBlurMode + "/" + appFilter.onlyListed() + appFilter.size();
+                + "/alwaysVisible=" + alwaysVisible + "/notch=" + notchStyle + "/popup=" + popupSeconds + "/chargingText=" + chargingText + "/swipeUpHides=" + swipeUpHides + "/swipeDownOpens=" + swipeDownOpens + "/iMotion=" + iMode + "/material=" + materialStyle + "/roundness=" + customCardRoundness + "/" + cardCornerRadiusDp + "/outline=" + pillOutlineMode + "/blur=" + transitionBlurMode
+                + "/islandStyle=" + islandStyle + "/widerAlbumCover=" + widerAlbumCover + "/appIconZoom=" + appIconZoom + "/" + appFilter.onlyListed() + appFilter.size();
     }
 
     /** One line in the event log whenever the values the module runs on differ from the last read. */
@@ -1029,6 +1046,7 @@ public final class ModuleSettings {
                 + " pill=" + pillAnchor + "/" + pillXDp + "/" + pillYDp + " size=" + pillHPct + "/" + pillMinWDp + "/" + pillMaxWDp + "/" + keepPillWidth + " hole=" + holeMode + "/" + holeDDp + "/" + holeXDp + "/" + holeYDp + " pausedS=" + pausedTimeoutS + " collapseS=" + autoCollapseS + " rules=" + rulesConfig.revision
                 + " pillOutline=" + pillOutlineMode + " showInFullscreen=" + showInFullscreen + " showInLandscape=" + showInLandscape + " appFilter=" + (appFilter.onlyListed() ? "only " : "except ") + appFilter.size();
         Diagnostics.fact("pill outline mode", Integer.toString(pillOutlineMode));
+        Diagnostics.fact("island style", islandStyle == STYLE_ONE_DESIGN ? "OneDesign" : "Pill style");
         Diagnostics.fact("island presentation", iMode ? "iMotion" : "stack");
         Diagnostics.fact("card material selected", materialStyle == MATERIAL_CLASSIC ? "classic" : "frosted");
         Diagnostics.fact("optional device cards", "charging=" + chargingInfo + " statistics=" + chargingStats + " headset=" + eventHeadset + " hotspot=" + hotspotCard + " unlock=" + unlockNotice + " stockCharging=" + stockChargingAnimation);
@@ -1089,6 +1107,42 @@ public final class ModuleSettings {
     public static boolean colorIcons() {
         ensureStarted();
         return colorIcons;
+    }
+
+    static int readIslandStyle(SharedPreferences settings) {
+        try {
+            return settings.getInt(KEY_ISLAND_STYLE, STYLE_PILL) == STYLE_ONE_DESIGN ? STYLE_ONE_DESIGN : STYLE_PILL;
+        } catch (ClassCastException ignored) {
+            return STYLE_PILL;
+        }
+    }
+
+    public static boolean oneDesign() {
+        ensureStarted();
+        return islandStyle == STYLE_ONE_DESIGN;
+    }
+
+    public static boolean widerAlbumCover() {
+        ensureStarted();
+        return widerAlbumCover;
+    }
+
+    public static int appIconZoom() {
+        ensureStarted();
+        return appIconZoom;
+    }
+
+    static int readAppIconZoom(SharedPreferences settings) {
+        return clampAppIconZoom(settings.getInt(KEY_APP_ICON_ZOOM, APP_ICON_ZOOM_DEFAULT));
+    }
+
+    /** Updates the settings app preview as the slider moves, before the value is saved. */
+    static void previewAppIconZoom(int value) {
+        appIconZoom = clampAppIconZoom(value);
+    }
+
+    private static int clampAppIconZoom(int value) {
+        return Math.max(APP_ICON_ZOOM_MIN, Math.min(APP_ICON_ZOOM_MAX, value));
     }
 
     /** Drive the waveform from the audio output instead of random bars. */

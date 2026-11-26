@@ -8,6 +8,12 @@
     <string name="setting_shade_media">Bildirim panelinde müzik çalar</string>
     <string name="setting_shade_media_desc">Bildirim panelinde adanın müzik kartını gösterir.</string>
     <string name="setting_color_icons_desc">Küçük adada uygulama ve takım simgelerinin renklerini korur.</string>
+    <string name="island_style">Stil</string>
+    <string name="style_pill">Hap stili</string>
+    <string name="style_one_design">OneDesign</string>
+    <string name="wider_album_cover">Daha geniş albüm kapağı</string>
+    <string name="wider_album_cover_desc">Küçük müzik adasında albüm kapağının daha geniş bir bölümünü göster.</string>
+    <string name="app_icon_zoom">Uygulama simgesi yakınlaştırma</string>
     <string name="setting_visualizer">Ses dalga biçimi</string>
     <string name="setting_visualizer_desc">Müzik dalga biçimini gerçek ses çıkışına göre hareket ettirir. Kapalıyken bunun yerine yumuşak bir animasyon kullanılır.</string>
     <string name="setting_paused_timeout">Duraklatılan müziği gösterme süresi</string>

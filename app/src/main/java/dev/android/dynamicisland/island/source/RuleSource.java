@@ -368,6 +368,7 @@ public final class RuleSource {
             it.trailing = IslandItem.Trailing.PROGRESS_RING;
         }
         Drawable icon = apps.icon(pkg);
+        it.appIcon = icon;
         it.icon = icon;
         it.iconIsImage = true;
         it.cardImage = icon;

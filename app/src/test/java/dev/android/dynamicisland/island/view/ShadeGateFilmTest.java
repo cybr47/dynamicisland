@@ -33,19 +33,6 @@ public class ShadeGateFilmTest {
     private static final int OPEN_FRAME = 40;
     private static final int CLOSE_FRAME = 100;
 
-    private static void fire(IslandView view, String method) {
-        try {
-            java.lang.reflect.Field f = IslandView.class.getDeclaredField("director");
-            f.setAccessible(true);
-            Object director = f.get(view);
-            java.lang.reflect.Method m = director.getClass().getDeclaredMethod(method);
-            m.setAccessible(true);
-            m.invoke(director);
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError(e);
-        }
-    }
-
     @Test
     public void shrinksIntoADotAndGrowsBack() throws Exception {
         Application app = RuntimeEnvironment.getApplication();
@@ -96,9 +83,6 @@ public class ShadeGateFilmTest {
         for (int frame = 0; frame < 160; frame++) {
             if (frame == 3) {
                 view.setItems(items, 0, new ArrayList<>());
-            }
-            if (frame == 30) {
-                fire(view, "startSplitNow");
             }
             if (frame == OPEN_FRAME) {
                 view.setShadeFraction(0.06f);

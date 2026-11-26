@@ -69,9 +69,6 @@ public class SleepTransitionTest {
             timer.icon=GlyphIcon.of(GlyphIcon.Kind.BELL);timer.accent=0xffffbd58;
             view.setItems(List.of(music,timer));
             Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(300));
-            // Like the other manual frame drivers, admit the view's delayed split once it is due.
-            Director director=ReflectionHelpers.getField(view,"director");
-            Runnable split=ReflectionHelpers.getField(director,"startSplit");split.run();
             step(16,100);
         }
         void flag(String method,boolean value) { ReflectionHelpers.callInstanceMethod(placement,method,from(boolean.class,value)); }

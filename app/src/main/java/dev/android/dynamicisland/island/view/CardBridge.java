@@ -77,7 +77,8 @@ final class CardBridge {
         } else if (event == LiquidBridge.MERGED) {
             wobble(MERGE_KICK_DP);
         }
-        cardColor = stack.fillColor(shapes.expansion(first), stack.blurFraction(first, shapes.expansion(first)));
+        float opening = shapes.expansion(first);
+        cardColor = stack.fillColor(first, opening, stack.blurFraction(first, opening));
         return bridge;
     }
 

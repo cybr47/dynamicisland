@@ -35,7 +35,6 @@ final class Director {
     private static final long FIRST_CONTENT_IN_MS = 60;
     private static final long APPEAR_IN_MS = 90;
     private static final long LEGACY_APPEAR_IN_MS = 150;
-    /** The first bubble waits this long after the pill appeared. */
     private static final long SPLIT_AFTER_APPEAR_MS = 220;
     private static final long BUBBLE_FIRST_IN_MS = 180;
     /** A closing card waits for the pill to grow back at most this long before it is dropped anyway. */
@@ -65,10 +64,9 @@ final class Director {
 
     private final Runnable autoCollapse = this::collapseIfExpanded;
     private final Runnable fadePillBlob = this::fadePillBlobNow;
-
     private final Runnable startSplit = this::startSplitNow;
-    /** When the pill last appeared from nothing, for the timing of the first bubble. */
     private long appearedAt;
+
     /** A popup remains focused on its own source across unrelated list refreshes. */
     private String peekKey;
 
@@ -83,9 +81,25 @@ final class Director {
         this.mediaFx = mediaFx;
     }
 
+    static final class ClassicPage extends HeadlinePage {
+        Content from, to;
+        boolean accepted;
+
+        ClassicPage(Metrics metrics, int direction, Content from, Content to) {
+            super(metrics, direction);
+            this.from = from;
+            this.to = to;
+        }
+    }
+
     private void reconcilePresentation() {
-        if (ModuleSettings.iMode() == (scene.iMode != null)) return;
-        cancelAutoCollapse(); view.removeCallbacks(fadePillBlob); view.removeCallbacks(startSplit);
+        boolean oneDesign = ModuleSettings.oneDesign();
+        boolean iMotion = ModuleSettings.iMode();
+        if (oneDesign == m.oneDesign && iMotion == (scene.iMode != null)) return;
+        view.resetPresentationTouch();
+        cancelAutoCollapse();
+        view.removeCallbacks(fadePillBlob);
+        view.removeCallbacks(startSplit);
         if (scene.peekOpen) host.onPeekClosed(clearPeek());
         scene.peekOpen=false; scene.held=false;
         boolean expanded=scene.mode==Mode.EXPANDED;
@@ -98,10 +112,22 @@ final class Director {
         if(view.sliderBody!=null) view.sliderBody.onSliderEnd();
         view.sliderBody=null; view.seekBody=null;
         scene.mode=Mode.HIDDEN;
-        scene.mainIn=null; scene.mainOut=null; scene.bubbleIn=null; scene.bubbleOut=null;
+        scene.mainIn=null; scene.mainOut=null;
+        scene.bubbleIn=null; scene.bubbleOut=null;
+        scene.primary=null; scene.secondary=null;
+        scene.classicPage=null;
+        pullingOpen=false;
+        scene.classicHiddenByGesture=false;
         scene.contentHandoff=null;
         sp.pillBlob.snapTo(1); sp.stackDx.snapTo(0); sp.stackDy.snapTo(0);
-        scene.iMode=ModuleSettings.iMode() ? new IMode(view,host,m,scene,bodies,this) : null;
+        sp.split.snapTo(0);
+        sp.leftHandle.snapTo(0);
+        sp.rightHandle.snapTo(0);
+        sp.press.snapTo(1);
+        sp.offsetX.snapTo(0);
+        view.applyStyle(oneDesign);
+        scene.iMode=iMotion ? new IMode(view,host,m,scene,bodies,this) : null;
+        host.onWindowHeightNeeded(m.compactWindowHeight());
         if(expanded) host.onExpandedChanged(false);
     }
 
@@ -152,23 +178,39 @@ final class Director {
     /** Applies a new sorted item list: decides between appearing, cross-fading, updating the stack or hiding. */
     void update(List<IslandItem> list, int hint) {
         reconcilePresentation();
-        if (scene.iMode != null) {
-            scene.items.clear(); scene.items.addAll(list);
-            mediaFx.retainFor(scene.items, scene.minimized);
-            scene.primary=list.isEmpty() ? null : list.get(0);
-            scene.secondary=list.size()>1 ? list.get(1) : null;
-            scene.iMode.update();
-            return;
-        }
         IslandItem oldPrimary = scene.primary;
         IslandItem oldSecondary = scene.secondary;
         scene.items.clear();
         scene.items.addAll(list);
         mediaFx.retainFor(scene.items, scene.minimized);
-        scene.primary = list.isEmpty() ? null : list.get(0);
-        scene.secondary = list.size() > 1 ? list.get(1) : null;
-        IslandItem primary = scene.primary;
-        if (primary == null) {
+        scene.queue.update(scene.items, scene.iMode == null ? List.of() : scene.minimized);
+        IslandItem first = list.isEmpty() ? null : list.get(0);
+        if (scene.iMode != null) {
+            scene.primary = first;
+            scene.iMode.update();
+            return;
+        }
+        boolean showFirst = !m.oneDesign || first != null && first.transientPopup;
+        IslandItem primary = showFirst ? first : scene.queue.current();
+        scene.primary = primary;
+        scene.secondary = !m.oneDesign && list.size() > 1 ? list.get(1) : null;
+        ClassicPage page = scene.classicPage;
+        if (page != null) {
+            if (page.accepted && primary != null && page.to.item.key.equals(primary.key)) {
+                page.to = new CompactContent(view, primary);
+                applyClassicPage(page);
+                updatePageHandles(page);
+            } else {
+                IslandItem next = scene.compactNeighbor(page.direction);
+                if (next == null || primary == null || !page.from.item.key.equals(primary.key) || !page.to.item.key.equals(next.key)) {
+                    scene.classicPage = null;
+                } else {
+                    if (next != page.to.item) page.to = new CompactContent(view, next);
+                    updatePageHandles(page);
+                }
+            }
+        }
+        if (primary == null || scene.classicHiddenByGesture) {
             if (scene.mode == Mode.EXPANDED) {
                 collapseCards(false);
             }
@@ -181,15 +223,125 @@ final class Director {
             else rebuildStack();
         } else if (scene.mode == Mode.HIDDEN) {
             appear(primary, hint == IslandView.HINT_FROM_LEFT);
-        } else {
+        } else if (scene.classicPage == null || !scene.classicPage.accepted) {
             switchCompact(oldPrimary, primary, hint);
-            sp.width.animateTo(scene.pillWidthFor(scene.mainIn.content), Motion.PILL_RESIZE);
+            if (scene.classicPage != null) scene.classicPage.from = scene.mainIn.content;
+            sp.width.animateTo(compactWidth(scene.mainIn.content), Motion.PILL_RESIZE);
             sp.height.animateTo(m.pillH, Motion.PILL_RESIZE);
         }
-        updateBubble(oldSecondary, scene.secondary);
+        if (m.oneDesign) updateHandles();
+        else updateBubble(oldSecondary, scene.secondary);
         view.scheduleFrame();
         view.scheduleTick();
         view.notifyHost();
+    }
+
+    /** Preview the neighbor at the current queue position throughout the drag. */
+    boolean dragCompact(float distance) {
+        if (!m.oneDesign) return false;
+        if (scene.mode != Mode.COMPACT || scene.shadePulled() || scene.sleeping || scene.suppressed) return false;
+        int direction = distance < 0 ? 1 : -1;
+        IslandItem next = scene.compactNeighbor(direction);
+        if (next == null) {
+            cancelCompactPage();
+            return false;
+        }
+        ClassicPage page = scene.classicPage;
+        if (page == null || page.released || page.direction != direction) {
+            page = new ClassicPage(m, direction, scene.mainIn.content, new CompactContent(view, next));
+            scene.classicPage = null;
+            shapes.main(page.fromMain);
+            float width = Math.min(ModuleSettings.keepPillWidth() && !next.fullWidth
+                    ? Math.max(scene.keptWidth, page.to.desiredWidth()) : page.to.desiredWidth(), compactRoom(true));
+            page.toMain.set(m.cx - width / 2, m.cy - m.pillH / 2, m.cx + width / 2, m.cy + m.pillH / 2);
+            scene.classicPage = page;
+            updatePageHandles(page);
+        }
+        page.drag(distance);
+        view.invalidate();
+        view.notifyHost();
+        return true;
+    }
+
+    private void updatePageHandles(ClassicPage page) {
+        page.outerHandles(scene.queue.neighbor(page.from.item.key, -page.direction) != null,
+                scene.queue.neighbor(page.to.item.key, page.direction) != null);
+    }
+
+    private void applyClassicPage(ClassicPage page) {
+        scene.mainIn = Layer.shown(page.to);
+        scene.mainOut = null;
+        float width = compactWidth(page.to);
+        page.toMain.set(m.cx - width / 2, m.cy - m.pillH / 2, m.cx + width / 2, m.cy + m.pillH / 2);
+        sp.width.animateTo(width, Motion.PILL_RESIZE);
+        sp.height.animateTo(m.pillH, Motion.PILL_RESIZE);
+    }
+
+    boolean hasCompactDrag() {
+        return scene.classicPage != null && !scene.classicPage.released;
+    }
+
+    void finishCompactPage(float velocity) {
+        if (!hasCompactDrag()) return;
+        ClassicPage page = scene.classicPage;
+        page.release(velocity);
+        if (page.commit && scene.queue.select(page.to.item.key)) {
+            scene.primary = scene.queue.current();
+            page.accepted = true;
+            applyClassicPage(page);
+            updateHandles();
+            Haptics.perform(view, HapticFeedbackConstants.CONTEXT_CLICK);
+            view.scheduleTick();
+            view.notifyHost();
+        }
+        view.scheduleFrame();
+    }
+
+    void cancelCompactPage() {
+        if (!hasCompactDrag()) return;
+        scene.classicPage.cancel();
+        view.scheduleFrame();
+    }
+
+    void finishCompactInteraction() {
+        ClassicPage page = scene.classicPage;
+        scene.classicPage = null;
+        if (page != null && page.accepted) {
+            sp.width.snapTo(page.main.width());
+            sp.height.snapTo(page.main.height());
+            sp.offsetX.snapTo(page.main.centerX() - m.cx);
+            sp.width.animateTo(compactWidth(scene.mainIn.content), Motion.PILL_RESIZE);
+            sp.height.animateTo(m.pillH, Motion.PILL_RESIZE);
+            sp.offsetX.animateTo(0, Motion.RUBBER_RELEASE);
+        }
+    }
+
+    private boolean stepCompactPage(float dt) {
+        ClassicPage page = scene.classicPage;
+        if (page == null) return false;
+        boolean active = page.step(dt);
+        if (page.released && !page.moving()) {
+            finishCompactInteraction();
+            return true;
+        }
+        return active;
+    }
+
+    private float compactWidth(Content content) {
+        if (!m.oneDesign) return scene.pillWidthFor(content);
+        return Math.min(scene.pillWidthFor(content),
+                compactRoom(scene.compactNeighbor(-1) != null || scene.compactNeighbor(1) != null));
+    }
+
+    void resizeCompact() {
+        sp.width.animateTo(compactWidth(scene.mainIn.content), Motion.PILL_RESIZE);
+    }
+
+    private float compactRoom(boolean handles) {
+        if (!handles) return m.screenW;
+        float margin = HeadlineHandles.reach(m.pillH) + m.outlineW;
+        float width = 2 * (Math.min(m.cx, m.screenW - m.cx) - margin);
+        return Math.max(width, Math.min(m.minPillW, m.screenW));
     }
 
     /** The compact pill gets (possibly) another primary item: update in place or slide the new content in. */
@@ -234,24 +386,22 @@ final class Director {
     /** Re-creates the content of the compact pill, keeping the running animation (e.g. after a geometry change). */
     void refreshMain() {
         if (scene.iMode != null) { scene.iMode.relayout(); return; }
+        finishCompactInteraction();
         IslandItem primary = scene.primary;
         scene.mainIn = scene.mainIn == null
                 ? Layer.shown(new CompactContent(view, primary))
                 : Layer.shownLike(new CompactContent(view, primary), scene.mainIn);
-        sp.width.animateTo(scene.pillWidthFor(scene.mainIn.content), Motion.PILL_RESIZE);
+        sp.width.animateTo(compactWidth(scene.mainIn.content), Motion.PILL_RESIZE);
         sp.height.animateTo(m.pillH, Motion.PILL_RESIZE);
-    }
-
-    void refreshBubble() {
-        if (scene.iMode != null) return;
-        scene.bubbleIn = Layer.shown(new BubbleContent(view, scene.secondary));
     }
 
     /** Remeasure with the new font while preserving which cards are open and their animation state. */
     void refreshFontLayouts() {
         if (scene.iMode != null) { scene.iMode.relayout(); return; }
         if (scene.mode == Mode.COMPACT && scene.primary != null) refreshMain();
-        if (scene.secondary != null && scene.bubbleIn != null) refreshBubble();
+        if (scene.bubbleIn != null && scene.secondary != null) {
+            scene.bubbleIn = Layer.shownLike(new BubbleContent(view, scene.secondary), scene.bubbleIn);
+        }
         if (scene.mode == Mode.EXPANDED) {
             List<IslandItem> opened = new ArrayList<>();
             for (Card card : scene.cards) if (!card.leaving) opened.add(card.item);
@@ -301,14 +451,62 @@ final class Director {
         }
     }
 
+    private void updateHandles() {
+        if (!m.oneDesign) {
+            if (scene.mode == Mode.COMPACT) {
+                sp.split.animateTo(scene.secondary != null ? 1f : 0f, Motion.BUBBLE_SPLIT);
+            } else {
+                view.removeCallbacks(startSplit);
+                sp.split.animateTo(0f, Motion.BUBBLE_MERGE);
+            }
+            return;
+        }
+        for (int side = -1; side <= 1; side += 2) {
+            if (scene.mode == Mode.COMPACT && scene.compactNeighbor(side) != null) {
+                sp.handle(side).animateTo(1.0f, Motion.BUBBLE_SPLIT);
+            } else {
+                sp.handle(side).animateTo(0.0f, Motion.BUBBLE_MERGE);
+            }
+        }
+    }
+
     // ---- appearing and hiding --------------------------------------------------------------------------------------
 
     /** Shows the island again for the current primary item (after being suppressed). */
     void reveal() {
         if (scene.iMode != null) { scene.iMode.update(); return; }
+        if (scene.classicHiddenByGesture) return;
         scene.mode = Mode.HIDDEN;
         scene.keptWidth = 0.0f; // the next pill starts from its own width
         appear(scene.primary, false);
+        updateHandles();
+    }
+
+    boolean hideByGesture() {
+        if (scene.mode != Mode.COMPACT || scene.sleeping || scene.suppressed || scene.held) return false;
+        if (scene.iMode != null) {
+            scene.iMode.hideByGesture();
+        } else {
+            scene.classicHiddenByGesture = true;
+            goHidden(false);
+            Haptics.perform(view, HapticFeedbackConstants.CONTEXT_CLICK);
+        }
+        return scene.hiddenByGesture();
+    }
+
+    void restoreByGesture() {
+        if (!scene.hiddenByGesture() || scene.sleeping || scene.suppressed) return;
+        if (scene.iMode != null) {
+            scene.iMode.restoreByGesture();
+        } else {
+            scene.classicHiddenByGesture = false;
+            if (scene.primary != null) reveal();
+            else settleResting();
+            Haptics.perform(view, HapticFeedbackConstants.CONTEXT_CLICK);
+            view.scheduleFrame();
+            view.scheduleTick();
+            view.notifyHost();
+        }
     }
 
     private void appear(IslandItem primary, boolean fromLeft) {
@@ -337,12 +535,13 @@ final class Director {
         }
         scene.mainOut = null;
         scene.mainIn = Layer.incoming(new CompactContent(view, primary), IslandView.now(), legacy() ? LEGACY_APPEAR_IN_MS : APPEAR_IN_MS).slide(fromLeft ? -1 : 0);
-        sp.width.animateTo(scene.pillWidthFor(scene.mainIn.content), Motion.PILL_GROW);
+        sp.width.animateTo(compactWidth(scene.mainIn.content), Motion.PILL_GROW);
         sp.height.animateTo(m.pillH, Motion.PILL_DROP);
         host.onWindowHeightNeeded(m.compactWindowHeight());
     }
 
     private void goHidden(boolean toLeft) {
+        finishCompactInteraction();
         cancelAutoCollapse();
         view.removeCallbacks(fadePillBlob);
         boolean wasPeek = scene.peekOpen;
@@ -362,12 +561,10 @@ final class Director {
             scene.mainOut = scene.mainIn.toOutgoing(t, toLeft ? -1 : 0);
         }
         scene.mainIn = null;
-        if (scene.bubbleIn != null) {
-            scene.bubbleOut = scene.bubbleIn.toOutgoing(t, 0);
-        }
+        if (scene.bubbleIn != null) scene.bubbleOut = scene.bubbleIn.toOutgoing(t, 0);
         scene.bubbleIn = null;
         restingSize();
-        sp.split.animateTo(0.0f, Motion.BUBBLE_MERGE);
+        updateHandles();
         if (toLeft) {
             sp.offsetX.impulse(-m.dp(HIDE_TO_LEFT_IMPULSE_DP));
         }
@@ -409,6 +606,7 @@ final class Director {
         if (show.isEmpty()) {
             return;
         }
+        finishCompactInteraction();
         boolean wasExpanded = scene.mode == Mode.EXPANDED;
         if (!wasExpanded) scene.contentHandoff = new ContentHandoff(scene.contentHandoff, true, IslandView.now());
         scene.mode = Mode.EXPANDED;
@@ -426,7 +624,7 @@ final class Director {
         if (!wasExpanded && scene.mainIn != null) {
             scene.mainOut = scene.mainIn.toOutgoing(IslandView.now(), 0).handoff(scene.contentHandoff);
         }
-        sp.split.animateTo(0.0f, Motion.BUBBLE_MERGE);
+        updateHandles();
         sp.offsetX.animateTo(0.0f);
         view.removeCallbacks(fadePillBlob);
         view.postDelayed(fadePillBlob, FADE_PILL_BLOB_DELAY_MS);
@@ -453,6 +651,7 @@ final class Director {
     /** Once the display is dark, do not carry half-folded cards or their blur surfaces into a wake. */
     void finishSleeping() {
         if(scene.iMode!=null) scene.iMode.finishSleeping();
+        scene.classicPage = null;
         cancelAutoCollapse();
         view.removeCallbacks(fadePillBlob);
         boolean hadCards = !scene.cards.isEmpty();
@@ -463,6 +662,10 @@ final class Director {
         scene.cards.clear();
         scene.mainOut = null;
         scene.bubbleOut = null;
+        view.removeCallbacks(startSplit);
+        if (!m.oneDesign && scene.iMode == null) {
+            sp.split.snapTo(scene.mode == Mode.COMPACT && scene.secondary != null ? 1f : 0f);
+        }
         scene.contentHandoff = null;
         sp.pillBlob.snapTo(1);
         sp.outlineFade.snapTo(1);
@@ -697,18 +900,17 @@ final class Director {
     }
 
     /**
-     * The pill grows back to its size; the bubble splits out of it only once the cards are gone ({@code withBubble}),
-     * so it comes out of the pill in view instead of appearing from behind the folding card.
+     * The pill grows back to its size and the handles return once the cards are gone.
      */
-    private void regrowPill(boolean withBubble) {
+    private void regrowPill(boolean withHandles) {
         if(scene.iMode!=null) return;
         if (scene.mode != Mode.COMPACT || scene.mainIn == null) {
             return;
         }
-        sp.width.animateTo(scene.pillWidthFor(scene.mainIn.content), Motion.PILL_REGROW);
+        sp.width.animateTo(compactWidth(scene.mainIn.content), Motion.PILL_REGROW);
         sp.height.animateTo(m.pillH, Motion.PILL_REGROW);
-        if (withBubble || legacy() || scene.cards.isEmpty()) {
-            sp.split.animateTo(scene.secondary != null ? 1.0f : 0.0f, Motion.BUBBLE_SPLIT);
+        if (withHandles || legacy() || scene.cards.isEmpty()) {
+            updateHandles();
         }
         view.scheduleFrame();
     }
@@ -753,6 +955,7 @@ final class Director {
                     c.w.snapTo(m.pillH * 1.8f);
                     c.h.snapTo(m.pillH * 0.8f);
                 }
+                c.compactWidth = c.w.value();
                 c.startAt = (created * CARD_STAGGER_MS) + t;
                 c.contentStart = c.startAt + CARD_CONTENT_DELAY_MS;
                 created++;
@@ -823,7 +1026,7 @@ final class Director {
         c.targetCy = m.cy;
         if (!legacy() && scene.mode == Mode.COMPACT && scene.mainIn != null) {
             // closing the stack: the card folds into the shape the pill is growing back to, so nothing pops when it ends
-            c.targetW = Math.max(m.pillH, scene.pillWidthFor(scene.mainIn.content));
+            c.targetW = Math.max(m.pillH, compactWidth(scene.mainIn.content));
             c.targetH = m.pillH;
         } else {
             c.targetW = m.pillH * 1.6f;
@@ -849,10 +1052,10 @@ final class Director {
      */
     boolean stepCards(float dt, long t) {
         if(scene.iMode!=null) return scene.iMode.step(dt,t);
+        boolean active = stepCompactPage(dt);
         if (scene.cards.isEmpty()) {
-            return false;
+            return active;
         }
-        boolean active = false;
         for (int i = scene.cards.size() - 1; i >= 0; i--) {
             Card c = scene.cards.get(i);
             if (!c.launched && t >= (c.leaving ? c.leaveAt : c.startAt)) {
@@ -931,7 +1134,7 @@ final class Director {
         }
         // close enough that the black card handing over to the pill does not show; waiting for the pill's last wobble
         // left an empty dark smear around the island for a third of a second
-        return Math.abs(sp.width.value() - scene.pillWidthFor(scene.mainIn.content)) < m.dp(8.0f)
+        return Math.abs(sp.width.value() - compactWidth(scene.mainIn.content)) < m.dp(8.0f)
                 && Math.abs(sp.height.value() - m.pillH) < m.dp(4.0f);
     }
 

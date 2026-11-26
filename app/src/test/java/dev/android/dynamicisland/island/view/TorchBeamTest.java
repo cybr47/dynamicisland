@@ -120,8 +120,9 @@ public class TorchBeamTest {
             touch(view,android.view.MotionEvent.ACTION_MOVE,x+40*scale,y+100*scale);frames(view,5);
             assertTrue("horizontal brightness control is preserved",writes[0]>0&&brightness[0]>.5f);
             IslandItem updated=item(brightness[0],true);updated.sliderChange=it.sliderChange;
+            float beforeUpdate=fx.thumbOffset(IslandView.now());
             view.setItems(java.util.List.of(updated));
-            assertEquals("a notification update preserves the thumb spring",offset,fx.thumbOffset(IslandView.now()),.01f);
+            assertEquals("a notification update preserves the thumb spring",beforeUpdate,fx.thumbOffset(IslandView.now()),.01f);
             touch(view,android.view.MotionEvent.ACTION_UP,x+40*scale,y+100*scale);frames(view,35);
             assertEquals(0,fx.thumbOffset(IslandView.now()),.01f);assertFalse(fx.animating(IslandView.now()));
             int savedWrites=writes[0];

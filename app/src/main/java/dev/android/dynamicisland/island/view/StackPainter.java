@@ -53,6 +53,7 @@ final class StackPainter {
     private final Scene scene;
     private final Shapes shapes;
     private final Path clip = new Path();
+    private final Path cardRim = new Path();
     private final RectF inner = new RectF();
     private final RectF slot = new RectF();
     private final RectF gooUpper = new RectF();
@@ -67,6 +68,8 @@ final class StackPainter {
     private float rimAlpha = -1.0f;
     private float rimSettle = -1.0f;
     private int rimBase;
+    private int rimTopColor;
+    private int rimBottomColor;
     private boolean drawFailureLogged;
     private Runnable materialFrameRequester;
 
@@ -153,16 +156,23 @@ final class StackPainter {
     }
 
     /** The card's fill: the pill's black while it pours out, turning into the card colour (and glass) as it opens. */
-    int fillColor(float opening, float blurFraction) {
+    int fillColor(Card c, float opening, float blurFraction) {
         if (ModuleSettings.lowPerformance()) return Colors.BLACK;
         boolean glass = scene.blur != null && scene.blur.available();
         float material = Easing.easeInOut(clamp01((opening - CARD_MATERIAL_FROM) / (1.0f - CARD_MATERIAL_FROM)));
-        int fill = Colors.blend(Colors.BLACK, glass ? Colors.CARD_GLASS : Colors.CARD_SOLID, material);
+        int headlineColor = c.body.headlineSurfaceColor();
+        int surface = glass ? Colors.CARD_GLASS : Colors.CARD_SOLID;
+        float targetAlpha = glass ? .46f : .9f;
+        if (headlineColor != 0) {
+            surface = headlineColor | Colors.BLACK;
+            targetAlpha = glass ? .68f : (headlineColor >>> 24) / 255f;
+        }
+        int fill = Colors.blend(Colors.BLACK, surface, material);
         // the see-through glass comes in over the whole opening: squeezing it into the last stretch made the black
         // turn transparent in one jump
         float glassIn = Easing.easeInOut(clamp01((opening - GLASS_FROM) / (1.0f - GLASS_FROM)));
         // the see-through part only counts as far as the real blur is there behind it
-        return Colors.withAlpha(fill, lerp(1.0f, glass ? 0.46f : 0.9f, glassIn * (glass ? blurFraction : 1.0f)));
+        return Colors.withAlpha(fill, lerp(1.0f, targetAlpha, glassIn * (glass ? blurFraction : 1.0f)));
     }
 
     /** Blur callback: paints a card into its blur slot, whose canvas origin is the slot, not the view. */
@@ -195,7 +205,7 @@ final class StackPainter {
                 if (slot.width() >= 1.0f && slot.height() >= 1.0f) {
                     float opening = visualOpening(c, shapes.expansion(c));
                     boolean frosted = FrostedSurface.requested();
-                    blur.place(c, slot, c.iMode ? IMode.corner(c,slot,m.pillH,m.cardRadius)
+                    blur.place(c, slot, c.iMode ? IMode.corner(c,slot,m)
                                     : c.body.cornerRadius(m.cardRadius, slot.height()), alpha * (c.iMode ? clamp01(c.iModeOpacity.value()) : 1),
                             frosted ? 0 : blurFraction(c, opening));
                 }
@@ -252,7 +262,7 @@ final class StackPainter {
     }
 
     private void drawCardSurface(Canvas canvas, Card c, RectF r, long t, float opening) {
-        float corner = c.iMode ? IMode.corner(c,r,m.pillH,m.cardRadius) : c.body.cornerRadius(m.cardRadius, r.height());
+        float corner = c.iMode ? IMode.corner(c,r,m) : c.body.cornerRadius(m.cardRadius, r.height());
         float rimSettled = c.iMode ? Easing.easeInOut(clamp01(opening)) : clamp01((opening - 0.82f) / 0.18f);
         // while it pours out of (or back into) the pill the card is the pill's black, but it wears a clearly
         // visible outline from the first frame, so the changing shape can be followed on a black screen; the card
@@ -268,23 +278,34 @@ final class StackPainter {
         // motion. Explicitly schedule its following frames even on a static card.
         if(frosted&&c.material.animating(t)&&materialFrameRequester!=null)materialFrameRequester.run();
         if(canFrost&&!frosted&&materialFrameRequester!=null)materialFrameRequester.run();
+        float contour = m.oneDesign ? CompactShape.cardAmount(c, r) : 0f;
         if (!frosted) {
-            paints.card.setColor(fillColor(opening, blurFraction(c, opening)));
-            canvas.drawRoundRect(r, corner, corner, paints.card);
+            CompactShape.path(clip, r, corner, contour);
+            paints.card.setColor(fillColor(c, opening, blurFraction(c, opening)));
+            canvas.drawPath(clip, paints.card);
         }
         // iMotion carries its pill contrast rim in the overlay, outside native slot clipping.
         // This gradient is only the card material's own rim, which develops as the card opens.
         int morphOutline = c.iMode ? 0x00FFFFFF
-                : Colors.withAlpha(c.leaving ? Colors.PILL_OUTLINE : MORPH_OUTLINE, scene.pillOutlineOpacity());
-        paints.cardStroke.setShader(ModuleSettings.legacyAnimation()
-                ? rimShader(r, rimSettled, 1.0f, MORPH_OUTLINE)
-                : rimShader(r, 1.0f, rimSettled, morphOutline));
-        inner.set(r);
-        inner.inset(m.outlineW / 2.0f, m.outlineW / 2.0f);
-        if (!frosted) canvas.drawRoundRect(inner, corner, corner, paints.cardStroke);
+                : Colors.withAlpha(c.leaving ? m.outlineColor() : MORPH_OUTLINE, scene.pillOutlineOpacity());
+        if (!frosted) {
+            boolean headlineMaterial = c.body.headlineSurfaceColor() != 0;
+            int topColor = headlineMaterial ? c.body.headlineRimColor() : Colors.RIM_TOP;
+            int bottomColor = headlineMaterial ? 0x00FFFFFF : Colors.RIM_BOTTOM;
+            paints.cardStroke.setShader(ModuleSettings.legacyAnimation()
+                    ? rimShader(r, rimSettled, 1.0f, MORPH_OUTLINE, topColor, bottomColor)
+                    : rimShader(r, 1.0f, rimSettled, morphOutline, topColor, bottomColor));
+            float strokeWidth = headlineMaterial ? m.dp(1f) : m.outlineW;
+            paints.cardStroke.setStrokeWidth(strokeWidth);
+            inner.set(r);
+            inner.inset(strokeWidth / 2f, strokeWidth / 2f);
+            CompactShape.path(cardRim, inner, corner, contour);
+            canvas.drawPath(cardRim, paints.cardStroke);
+        }
         if(c.iMode && scene.iMode!=null) {
             int compactSave=canvas.save();
-            clip.reset();clip.addRoundRect(r,corner,corner,Path.Direction.CW);canvas.clipPath(clip);
+            if (frosted) MaterialShape.path(clip, r, corner, cornerPower);
+            canvas.clipPath(clip);
             scene.iMode.drawCompactCard(canvas,c,r,t);
             canvas.restoreToCount(compactSave);
         }
@@ -293,9 +314,7 @@ final class StackPainter {
             return;
         }
         int save = canvas.save();
-        clip.reset();
-        if (frosted) MaterialShape.path(clip, r, corner,cornerPower);
-        else clip.addRoundRect(r, corner, corner, Path.Direction.CW);
+        if (frosted && (!c.iMode || scene.iMode == null)) MaterialShape.path(clip, r, corner, cornerPower);
         canvas.clipPath(clip);
         float backgroundAlpha=c.iMode && c.item.isMedia ? Easing.easeOutCubic(opening) : alpha;
         if (!frosted || !c.item.isMedia) drawBackground(c.body, canvas, r, backgroundAlpha);
@@ -346,18 +365,21 @@ final class StackPainter {
     }
 
     /** The light rim gradient of a card; rebuilt only when the card moved or changed height noticeably. */
-    private Shader rimShader(RectF r, float alpha, float settle, int base) {
+    private Shader rimShader(RectF r, float alpha, float settle, int base, int topColor, int bottomColor) {
         boolean stale = rim == null || Math.abs(rimHeight - r.height()) > 1.0f || Math.abs(rimTop - r.top) > 1.0f
-                || Math.abs(rimAlpha - alpha) > 0.02f || Math.abs(rimSettle - settle) > 0.02f || rimBase != base;
+                || Math.abs(rimAlpha - alpha) > 0.02f || Math.abs(rimSettle - settle) > 0.02f || rimBase != base
+                || rimTopColor != topColor || rimBottomColor != bottomColor;
         if (stale) {
             rimHeight = r.height();
             rimTop = r.top;
             rimAlpha = alpha;
             rimSettle = settle;
             rimBase = base;
+            rimTopColor = topColor;
+            rimBottomColor = bottomColor;
             rim = new LinearGradient(0.0f, r.top, 0.0f, r.bottom,
-                    Colors.withAlpha(whiteMix(base, Colors.RIM_TOP, settle), alpha),
-                    Colors.withAlpha(whiteMix(base, Colors.RIM_BOTTOM, settle), alpha), Shader.TileMode.CLAMP);
+                    Colors.withAlpha(whiteMix(base, topColor, settle), alpha),
+                    Colors.withAlpha(whiteMix(base, bottomColor, settle), alpha), Shader.TileMode.CLAMP);
         }
         return rim;
     }

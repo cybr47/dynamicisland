@@ -38,6 +38,7 @@ final class LivePreview extends FrameLayout {
     private final SharedPreferences prefs;
     private final IslandView island;
     private final List<IslandItem> samples = new ArrayList<>();
+    private IslandItem appIconSample;
     private int next;
     private int shown;
     /** After a setting changed, the sample that shows it is replayed until the preview is tapped. */
@@ -106,6 +107,8 @@ final class LivePreview extends FrameLayout {
         music.art = albumArt();
         music.cardImage = new BitmapDrawable(activity.getResources(), music.art);
         music.cardImageIsImage = true;
+        music.icon = music.cardImage;
+        music.iconIsImage = true;
         music.mediaPalette = ArtworkPalette.fromPixels(pixelsOf(music.art));
         music.accent = 0xFFE5558C;
         music.trailing = IslandItem.Trailing.WAVEFORM;
@@ -165,6 +168,35 @@ final class LivePreview extends FrameLayout {
         next = shown;
         removeCallbacks(cycle);
         if (running) postDelayed(cycle, 350);
+    }
+
+    void showMusicPill() {
+        showCompactPill(samples.get(MUSIC));
+    }
+
+    void showAppIconPill() {
+        if (appIconSample == null) {
+            IslandItem app = new IslandItem("preview:app-icon");
+            app.packageName = activity.getPackageName();
+            app.title = activity.getText(R.string.app_name);
+            app.trailing = IslandItem.Trailing.TEXT;
+            app.trailingText = app.title;
+            app.appIcon = activity.getApplicationInfo().loadIcon(activity.getPackageManager());
+            appIconSample = app;
+        }
+        showCompactPill(appIconSample);
+    }
+
+    void previewAppIconZoom(int amount) {
+        ModuleSettings.previewAppIconZoom(amount);
+        island.invalidate();
+    }
+
+    private void showCompactPill(IslandItem item) {
+        ModuleSettings.configurePreview(prefs);
+        removeCallbacks(cycle);
+        island.collapse();
+        island.setItems(Collections.singletonList(item));
     }
 
     void start() {

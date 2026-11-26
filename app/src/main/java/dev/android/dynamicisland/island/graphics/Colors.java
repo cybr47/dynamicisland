@@ -18,7 +18,7 @@ public final class Colors {
     public static final int CONTROL_FILL = 0x24FFFFFF;
     public static final int BUTTON_ACTION_FILL = 0x32FFFFFF;
     public static final int CARD_STROKE = 0x40FFFFFF;
-    public static final int PILL_OUTLINE = 0x47FFFFFF;
+    public static final int PILL_OUTLINE = 0x40FFFFFF;
     public static final int RIM_TOP = 0x38FFFFFF;
     public static final int RIM_BOTTOM = 0x0FFFFFFF;
     public static final int CALL_GREEN = 0xFF34C759;

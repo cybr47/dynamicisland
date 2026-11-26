@@ -7,6 +7,7 @@ import android.graphics.RectF;
 import android.view.HapticFeedbackConstants;
 import dev.android.dynamicisland.island.feedback.Haptics;
 import dev.android.dynamicisland.island.graphics.Colors;
+import dev.android.dynamicisland.island.graphics.Easing;
 import dev.android.dynamicisland.island.graphics.Spring;
 import dev.android.dynamicisland.island.model.IslandItem;
 import dev.android.dynamicisland.island.view.card.CardBody;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * One selected activity unfolds from its own compact surface. Other activities trade places in the
@@ -24,6 +26,7 @@ import java.util.Map;
 final class IMode {
     // The reference resolves its content in about 250 ms and its geometry in about 350 ms.
     static final float RESPONSE = .34f, DAMPING = .90f;
+    private static final int OFF_ROW = -2;
     private final IslandView view;
     private final IslandHost host;
     private final Metrics m;
@@ -32,25 +35,27 @@ final class IMode {
     private final Director director;
     private final Map<String, Node> nodes = new LinkedHashMap<>();
     private final RectF compactNatural = new RectF();
+    private final RectF compactIcon = new RectF();
     private final List<IslandItem> activities = new ArrayList<>();
     private final RectF rect = new RectF(), source = new RectF();
     private final Path clip = new Path();
     private final Path glowExclusion = new Path();
     private final RectF glowBounds = new RectF();
+    private final HeadlineHandles handles = new HeadlineHandles();
+    private final RectF pageBounds = new RectF();
     private final Path outlineOcclusion=new Path(),outlineSurface=new Path();
     private final RectF outlineBounds=new RectF();
     private final Path gatherMask=new Path();
     private final RectF gatherOther=new RectF();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private String selected;
-    private String rowAnchor;
+    private String pillAnchor;
+    private String anchorBeforePopup;
+    private int rowCount;
     /** A short popup that arrived is the first of the row (it must not wait behind the pill the row was paged to). */
     private String popupAnchor;
-    /** Where the row began before that popup, so it goes back there when the popup is over. */
-    private String anchorBeforePopup;
     private boolean initialized;
-    private int rowCount;
-    private final List<IslandItem> visible = new ArrayList<>(2);
+    private final List<IslandItem> visible = new ArrayList<>(3);
     private Card swipeCard, swipePreview;
     private int swipeDirection;
     private float swipeStart;
@@ -58,51 +63,56 @@ final class IMode {
     private boolean gestureHidden;
     private final Spring outline=new Spring(1,.22f,1).setValueThreshold(.001f);
 
-    /** Compact paging keeps one outline per slot; contents move inside it instead of crossing bodies. */
-    private final class CompactPage {
-        final List<Node> from, to;
-        final String anchor;
-        final int direction;
-        final boolean header;
-        final RectF fromMain=new RectF(),fromBubble=new RectF(),toMain=new RectF(),toBubble=new RectF();
-        final RectF main=new RectF(),bubble=new RectF();
-        final Spring progress=new Spring(0,.30f,.9f).setValueThreshold(.001f);
-        final Spring pull=new Spring(0,.36f,.78f).setValueThreshold(.015f);
-        final Spring load=new Spring(0,.34f,.82f).setValueThreshold(.001f);
-        final ContentBlur[] blur={new ContentBlur(),new ContentBlur(),new ContentBlur(),new ContentBlur()};
-        boolean released, commit;
-        CompactPage(int direction) {
-            this.direction=direction;header=false;from=rowNodes();
-            int index=0;
-            for(int i=0;i<activities.size();i++) if(activities.get(i).key.equals(from.get(0).item.key)) index=i;
-            anchor=activities.get(Math.floorMod(index+direction,activities.size())).key;
-            to=rowNodes(anchor);
-            from.get(0).bounds(fromMain);if(from.size()>1) from.get(1).bounds(fromBubble);
-            rowFrame(to,toMain,toBubble);bounds();
-        }
-        CompactPage(int direction,String incomingKey) {
-            this.direction=direction;header=true;anchor=rowAnchor;
-            from=rowNodes();to=rowNodes(rowAnchor,incomingKey);
-            from.get(0).bounds(fromMain);if(from.size()>1) from.get(1).bounds(fromBubble);
-            rowFrame(to,toMain,toBubble);bounds();
-        }
-        void bounds() {
-            float p=IslandView.clamp01(progress.value());
-            interpolate(fromMain,toMain,p,main);interpolate(fromBubble,toBubble,p,bubble);
-            if(from.size()<2 && to.size()<2) bubble.setEmpty();
-            // The shared outlines respond to the gesture too; they are not static containers.
-            float tension=load.value();
-            main.inset(-main.width()*.012f*tension,main.height()*.025f*tension);
-            main.offset(pull.value(),-m.dp(1.2f)*tension);
-            bubble.inset(bubble.width()*.015f*tension,bubble.height()*.015f*tension);
-            bubble.offset(pull.value()*.65f,m.dp(.6f)*tension);
-        }
-        void clear() { for(ContentBlur layer:blur) layer.clear(); }
+    private record Row(Node main, Node left, Node right) {
+        Node handle(int side) { return side < 0 ? left : right; }
+        boolean hasHandles() { return left != null || right != null; }
     }
 
-    private static void interpolate(RectF a,RectF b,float p,RectF out) {
-        out.set(a.left+(b.left-a.left)*p,a.top+(b.top-a.top)*p,
-                a.right+(b.right-a.right)*p,a.bottom+(b.bottom-a.bottom)*p);
+    /** Also coordinates the status row during an expanded card swipe. */
+    private final class CompactPage extends HeadlinePage {
+        final Row from, to;
+        final boolean header;
+        final RectF fromBubble = new RectF(), toBubble = new RectF(), bubble = new RectF();
+        final ContentBlur[] blur;
+
+        CompactPage(int direction, Row from, Row to, boolean header) {
+            super(m,direction);
+            this.from = from;
+            this.to = to;
+            this.header = header;
+            blur = new ContentBlur[m.oneDesign ? 2 : 4];
+            for (int i = 0; i < blur.length; i++) blur[i] = new ContentBlur();
+            from.main.bounds(fromMain);
+            rowFrame(to, toMain);
+            if (!m.oneDesign) {
+                if (from.right == null) sideSlot(fromMain, 1, 0f, fromBubble);
+                else from.right.bounds(fromBubble);
+                sideSlot(toMain, 1, to.right == null ? 0f : 1f, toBubble);
+            }
+            updateOuterHandles();
+            bounds();
+        }
+
+        @Override void bounds() {
+            super.bounds();
+            if (m.oneDesign) return;
+            interpolate(fromBubble, toBubble, fraction(), bubble);
+            float tension = load.value();
+            bubble.inset(bubble.width() * .015f * tension, bubble.height() * .015f * tension);
+            bubble.offset(pull.value() * .65f, m.dp(.6f) * tension);
+        }
+
+        void updateOuterHandles() {
+            if (!m.oneDesign) return;
+            outerHandles(scene.queue.neighbor(from.main.item.key, -direction) != null,
+                    scene.queue.neighbor(to.main.item.key, direction) != null);
+        }
+
+        float headerHandle(int side) {
+            return Easing.lerp(from.handle(side) == null ? 0 : 1, to.handle(side) == null ? 0 : 1, fraction());
+        }
+
+        void clear() { for(ContentBlur layer:blur) layer.clear(); }
     }
 
     static final class Node {
@@ -113,17 +123,18 @@ final class IMode {
         final Spring alpha = new Spring(0, .30f, 1).setValueThreshold(.002f);
         final Spring presence = new Spring(0,.38f,.92f).setValueThreshold(.001f);
         final Spring press = new Spring(1,.18f,.9f).setValueThreshold(.0005f);
-        /** 0 = long pill content; 1 = icon-only bubble content. */
+        /** 0 = pill content, 1 = a narrow handle with the content folded away. */
         final Spring iconOnly = new Spring(0, .28f, 1).setValueThreshold(.002f);
         final ContentBlur blur = new ContentBlur();
         final RectF target = new RectF();
-        int slot = -1;
+        int slot = OFF_ROW;
+        int side = 1;
         boolean removed;
         Node(IslandView view, IslandItem item) { refresh(view, item); }
         void refresh(IslandView view, IslandItem next) {
             item = next;
             compact = new CompactContent(view, next);
-            bubble = new BubbleContent(view, next);
+            bubble = view.oneDesign() ? null : new BubbleContent(view, next);
         }
         void bounds(RectF r) {
             float appear=.48f+.52f*IslandView.clamp01(presence.value());
@@ -183,9 +194,17 @@ final class IMode {
             else node.refresh(view,item);
             node.removed=false;
         }
-        if(compactPage!=null && (compactPage.from.stream().anyMatch(n->n.removed)
-                || compactPage.to.stream().anyMatch(n->n.removed))) finishCompactInteraction();
         followPopup();
+        if(compactPage!=null) {
+            Node neighbor=neighbor(compactPage.from.main.item.key,compactPage.direction,null);
+            if(compactPage.from.main.removed || compactPage.to.main.removed
+                    || !compactPage.header && !compactPage.commit
+                    && (neighbor==null || neighbor != compactPage.to.main)) {
+                finishCompactInteraction();
+            } else {
+                compactPage.updateOuterHandles();
+            }
+        }
         if (scene.items.isEmpty()) {
             if(scene.mode==Mode.EXPANDED) collapse();
             selected=null;
@@ -208,23 +227,21 @@ final class IMode {
             layout();
         }
         scene.mainIn=scene.primary==null ? null : Layer.shown(new CompactContent(view,scene.primary));
-        scene.bubbleIn=scene.secondary==null ? null : Layer.shown(new BubbleContent(view,scene.secondary));
-        scene.mainOut=null; scene.bubbleOut=null; scene.contentHandoff=null;
+        scene.mainOut=null; scene.contentHandoff=null;
         scene.springs.pillBlob.snapTo(1);
         initialized=true;
         resizeWindow();
         changed();
     }
 
-    private boolean listed(String key) {
+    private Node listed(String key) {
         Node node=key==null ? null : nodes.get(key);
-        return node!=null && !node.removed;
+        return node!=null && !node.removed ? node : null;
     }
 
     /**
      * A short popup (do not disturb, a headset, an unlock, ...) goes away by itself after a few seconds, so it has to
-     * be seen as the main pill the moment it comes: when the row had been paged to another pill the popup used to
-     * wait as the first sub pill and was gone before anyone saw it. When it is over the row goes back to where it was.
+     * be seen as the main pill the moment it comes. The queue remembers the selected activity during the popup.
      */
     private void followPopup() {
         IslandItem winner=null;
@@ -233,18 +250,19 @@ final class IMode {
             if(winner==null || item.priority()>winner.priority()
                     || item.priority()==winner.priority() && item.postTime>winner.postTime) winner=item;
         }
-        if(winner==null) {
-            if(popupAnchor==null) return;
-            finishCompactInteraction();
-            if(rowAnchor!=null && rowAnchor.equals(popupAnchor)) rowAnchor=listed(anchorBeforePopup) ? anchorBeforePopup : null;
-            popupAnchor=null;anchorBeforePopup=null;
-            return;
+        String key=winner==null ? null : winner.key;
+        if(Objects.equals(key,popupAnchor)) return;
+        if (!m.oneDesign) {
+            if (key == null) {
+                if (Objects.equals(pillAnchor, popupAnchor)) pillAnchor = anchorBeforePopup;
+                anchorBeforePopup = null;
+            } else {
+                if (popupAnchor == null) anchorBeforePopup = pillAnchor;
+                pillAnchor = key;
+            }
         }
-        if(winner.key.equals(popupAnchor)) return;
+        popupAnchor=key;
         finishCompactInteraction();
-        if(popupAnchor==null) anchorBeforePopup=rowAnchor;
-        popupAnchor=winner.key;
-        rowAnchor=winner.key;
     }
 
     private void refreshCard(Node node) {
@@ -263,69 +281,125 @@ final class IMode {
     }
 
     private void seed(Node node) {
-        bubbleBounds(rect);
+        handleBounds(1,rect);
         if(rect.isEmpty()) rect.set(m.cx-m.pillH/2,m.cy-m.pillH/2,m.cx+m.pillH/2,m.cy+m.pillH/2);
         node.x.snapTo(rect.centerX());node.y.snapTo(rect.centerY());
         node.w.snapTo(rect.width());node.h.snapTo(rect.height());node.iconOnly.snapTo(1);
     }
 
-    private List<Node> rowNodes() {
-        return rowNodes(rowAnchor);
-    }
-
-    private List<Node> rowNodes(String anchor) {
-        return rowNodes(anchor,selected);
-    }
-    private List<Node> rowNodes(String anchor,String exclude) {
-        List<Node> row=new ArrayList<>();
-        int first=0;
-        if(anchor!=null) for(int i=0;i<activities.size();i++)
-            if(activities.get(i).key.equals(anchor)) { first=i; break; }
-        for(int i=0;i<activities.size();i++) {
-            Node n=nodes.get(activities.get((first+i)%activities.size()).key);
-            if(!n.item.key.equals(exclude)) row.add(n);
+    private Row row(String exclude) {
+        if (!m.oneDesign) {
+            Node main = listed(pillAnchor);
+            if (main != null && !main.item.key.equals(exclude)) return rowAt(main, exclude);
+            if (main != null) {
+                Node next = neighbor(main.item.key, 1, exclude);
+                if (next != null) return rowAt(next, exclude);
+            }
+            for (IslandItem item : activities) {
+                if (!item.key.equals(exclude)) return rowAt(nodes.get(item.key), exclude);
+            }
+            return new Row(null, null, null);
         }
-        return row;
+        Node popup=listed(popupAnchor);
+        if(popup!=null && !popup.item.key.equals(exclude)) return rowAt(popup,exclude);
+        IslandItem current=scene.queue.current();
+        if(current!=null) {
+            Node main=listed(current.key);
+            if(!current.key.equals(exclude) && main!=null) return rowAt(main,exclude);
+            Node other=neighbor(current.key,1,exclude);
+            if(other==null) other=neighbor(current.key,-1,exclude);
+            if(other!=null) return rowAt(other,exclude);
+        }
+        for(IslandItem item:activities) {
+            if(!item.key.equals(exclude)) return rowAt(nodes.get(item.key),exclude);
+        }
+        return new Row(null,null,null);
     }
 
-    private void rowFrame(List<Node> row,RectF main,RectF bubble) {
-        float diameter=m.bubbleR*2;
-        float width=row.isEmpty() ? m.minPillW : scene.pillWidthFor(row.get(0).compact);
-        float extra=row.size()>1 ? m.bubbleGap+diameter : 0;
-        float margin=m.dp(8);
-        width=Math.min(width,Math.max(m.pillH,m.screenW-2*margin-extra));
-        float cx=Math.max(margin+width/2,Math.min(m.cx,m.screenW-margin-extra-width/2));
-        float bubbleX=cx+width/2+m.bubbleGap+diameter/2;
+    private Row rowAt(Node main,String exclude) {
+        return new Row(main, m.oneDesign ? neighbor(main.item.key, -1, exclude) : null,
+                neighbor(main.item.key, 1, exclude));
+    }
+
+    private Node neighbor(String key,int direction,String exclude) {
+        if (!m.oneDesign) {
+            int count = activities.size();
+            for (int i = 0; i < count; i++) {
+                if (!activities.get(i).key.equals(key)) continue;
+                for (int offset = 1; offset < count; offset++) {
+                    IslandItem item = activities.get(Math.floorMod(i + offset * direction, count));
+                    if (!item.key.equals(exclude)) return listed(item.key);
+                }
+                break;
+            }
+            return null;
+        }
+        IslandItem item=scene.queue.neighbor(key,direction);
+        if(item!=null && item.key.equals(exclude)) item=scene.queue.neighbor(item.key,direction);
+        return item==null ? null : listed(item.key);
+    }
+
+    private void rowFrame(Row row,RectF main) {
+        float width=row.main==null ? m.minPillW : scene.pillWidthFor(row.main.compact);
+        float margin = m.dp(8);
+        float left = margin;
+        float right = margin;
+        if (row.hasHandles()) {
+            if (m.oneDesign) {
+                left += HeadlineHandles.reach(m.pillH);
+                right = left;
+            } else {
+                right += m.bubbleGap + 2f * m.bubbleR;
+            }
+        }
+        width = Math.min(width, Math.max(m.pillH, m.screenW - left - right));
+        float cx = Math.max(left + width / 2, Math.min(m.cx, m.screenW - right - width / 2));
         main.set(cx-width/2,m.cy-m.pillH/2,cx+width/2,m.cy+m.pillH/2);
-        bubble.set(bubbleX-diameter/2,m.cy-diameter/2,bubbleX+diameter/2,m.cy+diameter/2);
+    }
+
+    private void sideSlot(RectF main, int side, float presence, RectF out) {
+        if (m.oneDesign) {
+            HeadlineHandles.bounds(main, side, presence, out);
+        } else {
+            float radius = m.bubbleR * presence;
+            float x = main.right + (m.bubbleGap + m.bubbleR) * presence;
+            float y = main.centerY();
+            out.set(x - radius, y - radius, x + radius, y + radius);
+        }
     }
 
     private void layout() {
         layout(false);
     }
     private void layout(boolean preserveEntryOrigins) {
-        List<Node> row=rowNodes();
-        rowCount=row.size();
-        scene.springs.split.snapTo(row.size()>1 ? 1 : 0);
-        RectF frameMain=new RectF(),bubble=new RectF();rowFrame(row,frameMain,bubble);
+        Row row=row(selected);
+        scene.springs.leftHandle.snapTo(row.left!=null ? 1 : 0);
+        scene.springs.rightHandle.snapTo(m.oneDesign && row.right != null ? 1 : 0);
+        scene.springs.split.snapTo(!m.oneDesign && row.right != null ? 1 : 0);
+        rowCount = activities.size() - (selected == null ? 0 : 1);
+        RectF frameMain=new RectF(),left=new RectF(),right=new RectF();
+        rowFrame(row,frameMain);
+        sideSlot(frameMain, -1, 1f, left);
+        sideSlot(frameMain, 1, 1f, right);
         for(Node n:nodes.values()) {
-            n.slot=-1;
-            n.target.set(bubble);
+            if(n==row.main) {
+                n.slot=0;
+                n.target.set(frameMain);
+            } else {
+                n.slot=n==row.left ? -1 : n==row.right ? 1 : OFF_ROW;
+                if(n.slot!=OFF_ROW) n.side=n.slot;
+                n.target.set(n.side<0 ? left : right);
+            }
         }
-        if(!row.isEmpty()) {
-            Node main=row.get(0); main.slot=0;
-            main.target.set(frameMain);
-        }
-        if(row.size()>1) row.get(1).slot=1;
         visible.clear();
         for(Node n:nodes.values()) {
-            if(n.slot>=0 && !n.removed && !gestureHidden) visible.add(n.item);
-            float visible=n.slot>=0 && !n.removed && scene.mode!=Mode.HIDDEN ? 1 : 0;
+            if(n.slot!=OFF_ROW && !n.removed && !gestureHidden) visible.add(n.item);
+            float visible=n.slot!=OFF_ROW && !n.removed && scene.mode!=Mode.HIDDEN ? 1 : 0;
             if(n.removed) {
                 if(scene.items.isEmpty() && keepsIdle()) {
                     idleBounds(n.target); // the last activity folds into the empty pill
                 } else {
-                    // Depart from the last position, rather than flying across the row to its bubble slot.
+                    // Depart from the last painted position.
                     n.target.set(n.x.value()-n.w.value()/2,n.y.value()-n.h.value()/2,
                             n.x.value()+n.w.value()/2,n.y.value()+n.h.value()/2);
                 }
@@ -371,6 +445,7 @@ final class IMode {
             incoming.iMode=true;
             incoming.cx.snapTo(source.centerX()); incoming.cy.snapTo(source.centerY());
             incoming.w.snapTo(source.width()); incoming.h.snapTo(source.height());
+            incoming.compactWidth = source.width();
             incoming.iModeRole.snapTo(iconOnly);
             incoming.handoff=ContentHandoff.iMode(null,true,IslandView.now());
             scene.cards.add(incoming);
@@ -424,12 +499,21 @@ final class IMode {
                 finishCompactPage(direction>0 ? -m.dp(1000) : m.dp(1000));
             } else {
                 // A swipe during the tail of a card's fold still changes the destination row.
-                List<Node> row=rowNodes();if(row.isEmpty()) return;
-                int index=0;
-                for(int i=0;i<activities.size();i++) if(activities.get(i).key.equals(row.get(0).item.key)) index=i;
-                rowAnchor=activities.get(Math.floorMod(index+direction,activities.size())).key;layout();changed();
+                Node next = pagingNeighbor(row(null), direction);
+                if (next != null && selectMain(next)) { layout(); changed(); }
             }
         }
+    }
+
+    private Node pagingNeighbor(Row row, int direction) {
+        if (row.main == null) return null;
+        return m.oneDesign ? row.handle(direction) : neighbor(row.main.item.key, direction, null);
+    }
+
+    private boolean selectMain(Node next) {
+        if (m.oneDesign) return scene.queue.select(next.item.key);
+        pillAnchor = next.item.key;
+        return true;
     }
 
     boolean dragCompact(float distance) {
@@ -437,45 +521,53 @@ final class IMode {
         int direction=distance<0 ? 1 : -1;
         if(compactPage!=null && compactPage.released) finishCompactInteraction();
         if(compactPage==null || compactPage.direction!=direction) {
+            Row from=row(null);
+            Node next=pagingNeighbor(from,direction);
+            if(next==null) {
+                cancelCompactPage();
+                return false;
+            }
             if(compactPage!=null) compactPage.clear();
-            compactPage=new CompactPage(direction);
+            compactPage=new CompactPage(direction,from,rowAt(next,null),false);
         }
-        compactPage.progress.snapTo(Math.min(1,Math.abs(distance)/Math.max(m.dp(70),compactPage.fromMain.width())));
-        float tension=(float)Math.tanh(Math.abs(distance)/m.dp(65));
-        compactPage.pull.snapTo(Math.signum(distance)*m.dp(9)*tension);
-        compactPage.load.snapTo(tension);
-        compactPage.bounds();changed();return true;
+        compactPage.drag(distance);
+        changed();return true;
     }
     boolean hasCompactDrag() { return compactPage!=null && !compactPage.header && !compactPage.released; }
     void finishCompactPage(float velocity) {
         if(!hasCompactDrag()) return;
         CompactPage page=compactPage;
-        page.commit=Math.abs(velocity)>m.dp(600) ? velocity*page.direction<0 : page.progress.value()>.24f;
-        page.released=true;
-        float travel=Math.max(m.dp(70),page.fromMain.width());
-        float speed=Math.max(-5,Math.min(5,-velocity*page.direction/travel));
-        page.progress.impulse(speed-page.progress.velocity());page.progress.animateTo(page.commit ? 1 : 0);
-        page.pull.animateTo(0);page.load.animateTo(0);
-        if(page.commit) Haptics.perform(view,HapticFeedbackConstants.CONTEXT_CLICK);
+        page.release(velocity);
+        if(page.commit && selectMain(page.to.main)) {
+            Haptics.perform(view,HapticFeedbackConstants.CONTEXT_CLICK);
+        }
         changed();
     }
     void cancelCompactPage() {
         if(!hasCompactDrag()) return;
-        compactPage.released=true;compactPage.commit=false;compactPage.progress.animateTo(0);
-        compactPage.pull.animateTo(0);compactPage.load.animateTo(0);changed();
+        compactPage.cancel();changed();
     }
     /** Preserve the currently painted slot bounds if a new interaction interrupts the settle. */
     void finishCompactInteraction() {
         if(compactPage==null) return;
         CompactPage page=compactPage;compactPage=null;
-        if(!page.header && (page.released ? page.commit : page.progress.value()>=.5f)
-                && nodes.containsKey(page.anchor) && !nodes.get(page.anchor).removed) rowAnchor=page.anchor;
         layout();
         for(Node node:nodes.values()) {
-            RectF r=node.slot==0 ? page.main : page.bubble;
-            boolean represented=!r.isEmpty();if(!represented) r=node.target;
+            RectF r=node.target;
+            boolean represented=node.slot!=OFF_ROW;
+            if(node.slot==0) r=page.main;
+            else if(represented) {
+                if (m.oneDesign) {
+                    sideSlot(page.main, node.slot, 1f, source);
+                    r = source;
+                } else if (!page.bubble.isEmpty()) {
+                    r = page.bubble;
+                } else {
+                    represented = false;
+                }
+            }
             node.x.snapTo(r.centerX());node.y.snapTo(r.centerY());node.w.snapTo(r.width());node.h.snapTo(r.height());
-            float visible=node.slot>=0 && !node.removed && !gestureHidden ? 1 : 0;
+            float visible=node.slot!=OFF_ROW && !node.removed && !gestureHidden ? 1 : 0;
             node.alpha.snapTo(represented ? visible : 0);node.iconOnly.snapTo(node.slot==0 ? 0 : 1);
             node.presence.snapTo(node.alpha.value());
             node.alpha.animateTo(visible);node.presence.animateTo(visible);
@@ -567,7 +659,7 @@ final class IMode {
         c.cx.animateTo(end.centerX(),.36f,.90f); c.cy.animateTo(end.centerY(),.36f,.90f);
         c.w.animateTo(end.width(),.36f,.90f); c.h.animateTo(end.height(),.34f,.86f);
         c.iModeRole.animateTo(n.slot==0 ? 0 : 1);
-        c.iModeOpacity.animateTo(n.slot>=0 && !n.removed && scene.mode!=Mode.HIDDEN ? 1 : 0,.24f,1);
+        c.iModeOpacity.animateTo(n.slot!=OFF_ROW && !n.removed && scene.mode!=Mode.HIDDEN ? 1 : 0,.24f,1);
     }
     private void trimDepartures() {
         // Repeated taps cannot accumulate expensive RemoteViews, GPU materials or native blur windows.
@@ -630,7 +722,8 @@ final class IMode {
             swipePreview.handoff=ContentHandoff.iMode(null,true,IslandView.now()-1000);
             scene.cards.add(swipePreview);swipeDirection=direction;
             if(compactPage!=null) compactPage.clear();
-            compactPage=new CompactPage(direction,next.key);
+            Row from=row(selected),to=row(next.key);
+            compactPage=from.main==null || to.main==null ? null : new CompactPage(direction,from,to,true);
         }
         float travel=m.cardWidth()+m.dp(12);
         float offset=Math.max(-travel,Math.min(travel,swipeStart+distance));
@@ -696,9 +789,8 @@ final class IMode {
         syncOutlineTarget();
         boolean active=outline.step(dt);
         if(compactPage!=null) {
-            active|=compactPage.progress.step(dt)|compactPage.pull.step(dt)|compactPage.load.step(dt);compactPage.bounds();
-            if(compactPage.released && compactPage.progress.isAtRest() && compactPage.pull.isAtRest()
-                    && compactPage.load.isAtRest()) finishCompactInteraction();
+            active|=compactPage.step(dt);
+            if(compactPage.released && !compactPage.moving()) finishCompactInteraction();
         }
         for(Node n:nodes.values()) active|=n.step(dt);
         for(int i=scene.cards.size()-1;i>=0;i--) {
@@ -725,8 +817,7 @@ final class IMode {
     }
     boolean animating() {
         if(!outline.isAtRest()) return true;
-        if(compactPage!=null && (!compactPage.progress.isAtRest() || !compactPage.pull.isAtRest()
-                || !compactPage.load.isAtRest())) return true;
+        if(compactPage!=null && compactPage.moving()) return true;
         for(Node n:nodes.values()) if(n.moving()) return true;
         return false;
     }
@@ -768,24 +859,32 @@ final class IMode {
     }
     /** Keep one sampling registration, including when empty, ready for every possible compact slot. */
     void outlineSamplingBounds(RectF out) {
-        float margin=m.dp(8),extra=m.bubbleGap+m.bubbleR*2;
-        float width=Math.min(m.maxPillW,m.screenW-margin*2-extra);
-        float cx=Math.max(margin+width/2,Math.min(m.cx,m.screenW-margin-extra-width/2));
-        out.set(cx-width/2,m.cy-m.pillH/2,cx+width/2+extra,m.cy+m.pillH/2);
+        float extra = m.oneDesign ? HeadlineHandles.reach(m.pillH) : m.bubbleGap + 2f * m.bubbleR;
+        float left = m.oneDesign ? extra : 0f;
+        float margin = m.dp(8);
+        float width = Math.min(m.maxPillW, m.screenW - 2f * margin - left - extra);
+        float cx = Math.max(margin + left + width / 2, Math.min(m.cx, m.screenW - margin - extra - width / 2));
+        out.set(cx - width / 2 - left, m.cy - m.pillH / 2, cx + width / 2 + extra, m.cy + m.pillH / 2);
     }
     int count() { return activities.size(); }
     List<IslandItem> visibleItems() { return visible; }
     String hit(float x,float y,float pad) {
         if(compactPage!=null) {
-            List<Node> row=compactPage.progress.value()<.5f ? compactPage.from : compactPage.to;
+            Row row=compactPage.fraction()<.5f ? compactPage.from : compactPage.to;
             rect.set(compactPage.main);rect.inset(-pad,-pad);
-            if(rect.contains(x,y)) return row.get(0).item.key;
-            rect.set(compactPage.bubble);rect.inset(-pad,-pad);
-            if(row.size()>1 && !compactPage.bubble.isEmpty() && rect.contains(x,y)) return row.get(1).item.key;
+            if(rect.contains(x,y)) return row.main.item.key;
+            for(int side=-1;side<=1;side+=2) {
+                Node adjacent=row.handle(side);
+                if(adjacent==null) continue;
+                handleBounds(side,rect);
+                if(rect.isEmpty()) continue;
+                rect.inset(-pad,-pad);
+                if(rect.contains(x,y)) return adjacent.item.key;
+            }
             return null;
         }
         for(Node n:nodes.values()) {
-            if(n.slot<0 || n.alpha.value()<.4f) continue;
+            if(n.slot==OFF_ROW || n.alpha.value()<.4f) continue;
             Card returning=scene.findCard(n.item.key);
             if(returning!=null && !returning.iModePreview && !returning.iModePaging) {
                 if(!returning.leaving) continue;
@@ -803,16 +902,26 @@ final class IMode {
         for(Node n:nodes.values()) if(n.slot==0) { n.bounds(out); return; }
         out.set(m.cx-m.pillH/2,m.cy-m.pillH/2,m.cx+m.pillH/2,m.cy+m.pillH/2);
     }
-    void bubbleBounds(RectF out) {
-        if(compactPage!=null) { out.set(compactPage.bubble);return; }
-        for(Node n:nodes.values()) if(n.slot==1) { n.bounds(out); return; }
+    void handleBounds(int side,RectF out) {
+        if(compactPage!=null) {
+            if (!m.oneDesign) {
+                if (side > 0) out.set(compactPage.bubble);
+                else out.setEmpty();
+                return;
+            }
+            if(compactPage.header) HeadlineHandles.bounds(compactPage.main,side,compactPage.headerHandle(side),out);
+            else compactPage.sideBounds(compactPage.main,side,out);
+            return;
+        }
+        for(Node n:nodes.values()) if(n.slot==side) { n.bounds(out); return; }
         out.setEmpty();
     }
     /** Both status-row slots travel into the camera-hole anchor, rather than shrinking in place. */
     void shadeBounds(RectF from,RectF out) {
         if(from.isEmpty()) { out.setEmpty();return; }
         float gate=IslandView.clamp01(scene.springs.shadeGate.value());
-        float width=from.height()*.65f+(from.width()-from.height()*.65f)*gate;
+        float dot=Math.min(from.width(),from.height()*.65f);
+        float width=dot+(from.width()-dot)*gate;
         float height=from.height()*(.65f+.35f*gate);
         float cx=m.cx+(from.centerX()-m.cx)*gate;
         float cy=m.cy+(from.centerY()-m.cy)*gate;
@@ -823,19 +932,27 @@ final class IMode {
         return card!=null && !card.iModePreview && !card.iModePaging;
     }
 
-    /** The empty pill: a plain black capsule around the camera, outlined like the rest. */
+    /** The empty bar around the camera uses the same contour as an active bar. */
     private void drawIdle(Canvas canvas) {
         idleBounds(rect);
         shadeBounds(rect,rect);
-        float radius=rect.height()/2;
+        m.compactPath(clip, rect);
         paint.setStyle(Paint.Style.FILL); paint.setColor(Colors.BLACK);
-        canvas.drawRoundRect(rect,radius,radius,paint);
+        canvas.drawPath(clip,paint);
         if(scene.pillOutlineOpacity()>.01f) {
-            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(m.outlineW);
-            paint.setColor(Colors.withAlpha(Colors.PILL_OUTLINE,scene.pillOutlineOpacity()));
-            canvas.drawRoundRect(rect,radius,radius,paint);
-            paint.setStyle(Paint.Style.FILL);
+            drawCompactRim(canvas,1);
         }
+    }
+
+    private void drawCompactRim(Canvas canvas, float thickness) {
+        int save = canvas.save();
+        canvas.clipOutPath(clip);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(2f * m.outlineW * thickness);
+        paint.setColor(Colors.withAlpha(m.outlineColor(), scene.pillOutlineOpacity()));
+        canvas.drawPath(clip, paint);
+        paint.setStyle(Paint.Style.FILL);
+        canvas.restoreToCount(save);
     }
 
     void draw(Canvas canvas,long time) {
@@ -863,93 +980,113 @@ final class IMode {
             if(alpha<.003f || ownsSurface(n.item.key)) continue;
             n.bounds(rect);
             shadeBounds(rect,rect);
-            view.drawCompactGlow(canvas,rect,alpha*contentAlpha);
-            int save=canvas.saveLayerAlpha(rect.left-m.dp(2),rect.top-m.dp(2),rect.right+m.dp(2),rect.bottom+m.dp(2),Math.round(alpha*255));
-            float radius=rect.height()/2;
+            float role=IslandView.clamp01(n.iconOnly.value());
+            if(m.oneDesign && n.slot!=0 && n.slot!=OFF_ROW) alpha*=contentAlpha;
+            if(alpha<.003f) continue;
+            view.drawCompactGlow(canvas,rect,alpha*contentAlpha*(m.oneDesign ? 1-role : 1f));
+            int save=alpha>=.995f ? canvas.save()
+                    : canvas.saveLayerAlpha(rect.left-m.dp(2),rect.top-m.dp(2),rect.right+m.dp(2),rect.bottom+m.dp(2),Math.round(alpha*255));
+            compactNodePath(clip, rect, n.side);
             paint.setStyle(Paint.Style.FILL); paint.setColor(Colors.BLACK);
-            canvas.drawRoundRect(rect,radius,radius,paint);
+            canvas.drawPath(clip,paint);
             if(scene.pillOutlineOpacity()>.01f) {
                 int strokeSave=canvas.save();
                 if(gate<.999f) {
                     gatherMask.reset();
                     for(Node other:nodes.values()) if(other!=n && other.alpha.value()>.95f && !ownsSurface(other.item.key)) {
                         other.bounds(gatherOther);shadeBounds(gatherOther,gatherOther);
-                        outlineSurface.reset();outlineSurface.addRoundRect(gatherOther,gatherOther.height()/2,gatherOther.height()/2,Path.Direction.CW);
+                        compactNodePath(outlineSurface, gatherOther, other.side);
                         gatherMask.op(outlineSurface,Path.Op.UNION);
                     }
                     canvas.clipOutPath(gatherMask);
                 }
-                paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(m.outlineW);
-                paint.setColor(Colors.withAlpha(Colors.PILL_OUTLINE,scene.pillOutlineOpacity()));
-                canvas.drawRoundRect(rect,radius,radius,paint);paint.setStyle(Paint.Style.FILL);
+                drawCompactRim(canvas,m.oneDesign ? 1-.45f*role : .5f);
                 canvas.restoreToCount(strokeSave);
             }
-            clip.reset();clip.addRoundRect(rect,radius,radius,Path.Direction.CW);canvas.clipPath(clip);
-            float role=IslandView.clamp01(n.iconOnly.value());
-            float speed=Math.max(Math.max(Math.abs(n.x.velocity()),Math.abs(n.y.velocity())),
-                    Math.max(Math.abs(n.w.velocity()),Math.abs(n.h.velocity())));
-            float motionBlur=IslandView.clamp01(speed/m.dp(600));
-            motionBlur*=motionBlur;
-            float blur=Math.max(1-IslandView.clamp01(n.presence.value()),
-                    Math.max(motionBlur,Math.max(1-contentAlpha,Math.abs(n.iconOnly.target()-role))));
-            Canvas content=n.blur.begin(canvas,rect,blur,m.dp(ContentBlur.RADIUS_DP));
-            try { drawCompact(content,n,rect,role,contentAlpha); }
-            finally { n.blur.end(canvas,content); }
-            if(n.slot==1 && rowCount>2 && contentAlpha>.01f) drawOverflow(canvas,rect,rowCount-2,contentAlpha);
+            if(!m.oneDesign || role<.999f) {
+                canvas.clipPath(clip);
+                float speed=Math.max(Math.max(Math.abs(n.x.velocity()),Math.abs(n.y.velocity())),
+                        Math.max(Math.abs(n.w.velocity()),Math.abs(n.h.velocity())));
+                float motionBlur=IslandView.clamp01(speed/m.dp(600));
+                motionBlur*=motionBlur;
+                float blur=Math.max(1-IslandView.clamp01(n.presence.value()),
+                        Math.max(motionBlur,Math.max(1-contentAlpha,Math.abs(n.iconOnly.target()-role))));
+                Canvas content=n.blur.begin(canvas,rect,blur,m.dp(ContentBlur.RADIUS_DP));
+                try { drawCompact(content,n,rect,role,contentAlpha); }
+                finally { n.blur.end(canvas,content); }
+            }
+            if (!m.oneDesign && n.slot == 1 && rowCount > 2 && contentAlpha > .01f) {
+                drawOverflow(canvas, rect, rowCount - 2, contentAlpha);
+            }
             canvas.restoreToCount(save);
         }
     }
+
+    private void compactNodePath(Path path, RectF bounds, int side) {
+        if (m.oneDesign) HeadlineHandles.exchangePath(path, bounds, side);
+        else m.compactPath(path, bounds);
+    }
+
     private void drawCompactPage(Canvas canvas) {
         CompactPage page=compactPage;
-        drawPageCell(canvas,page,page.main,0);
-        if(page.from.size()>1 && page.to.size()>1) drawPageCell(canvas,page,page.bubble,1);
-    }
-    private void drawPageCell(Canvas canvas,CompactPage page,RectF frame,int slot) {
         float gate=IslandView.clamp01(scene.springs.shadeGate.value());
         float contentAlpha=IslandView.clamp01((gate-.45f)/.4f);
-        RectF bounds=new RectF();shadeBounds(frame,bounds);
-        view.drawCompactGlow(canvas,bounds,contentAlpha);
-        float radius=bounds.height()/2;
-        paint.setStyle(Paint.Style.FILL);paint.setColor(Colors.BLACK);canvas.drawRoundRect(bounds,radius,radius,paint);
-        if(scene.pillOutlineOpacity()>.01f) {
-            int strokeSave=canvas.save();
-            if(gate<.999f) {
-                RectF other=slot==0 ? page.bubble : page.main;
-                if(!other.isEmpty()) {
-                    shadeBounds(other,gatherOther);gatherMask.reset();
-                    gatherMask.addRoundRect(gatherOther,gatherOther.height()/2,gatherOther.height()/2,Path.Direction.CW);canvas.clipOutPath(gatherMask);
-                }
-            }
-            paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(m.outlineW);
-            paint.setColor(Colors.withAlpha(Colors.PILL_OUTLINE,scene.pillOutlineOpacity()));
-            canvas.drawRoundRect(bounds,radius,radius,paint);paint.setStyle(Paint.Style.FILL);
-            canvas.restoreToCount(strokeSave);
+        if (m.oneDesign && !page.header) {
+            shadeBounds(page.main, pageBounds);
+            view.drawCompactGlow(canvas, pageBounds, contentAlpha);
+            page.draw(canvas, handles, pageBounds, page.from.main.compact, page.to.main.compact,
+                    Colors.BLACK, Colors.BLACK, contentAlpha, outlineOpacity(), contentAlpha);
+            return;
         }
-        int save=canvas.save();clip.reset();clip.addRoundRect(bounds,radius,radius,Path.Direction.CW);canvas.clipPath(clip);
-        float p=IslandView.clamp01(page.progress.value());
-        boolean unchanged=page.from.get(slot).item.key.equals(page.to.get(slot).item.key);
+        drawPageCell(canvas, page, page.main, 0, contentAlpha);
+        if (!m.oneDesign && !page.bubble.isEmpty()) drawPageCell(canvas, page, page.bubble, 1, contentAlpha);
+    }
+
+    private void drawPageCell(Canvas canvas, CompactPage page, RectF frame, int slot, float contentAlpha) {
+        RectF bounds = pageBounds;
+        shadeBounds(frame, bounds);
+        view.drawCompactGlow(canvas, bounds, contentAlpha);
+        if (m.oneDesign) {
+            for (int side = -1; side <= 1; side += 2) {
+                handles.draw(canvas, bounds, side, page.headerHandle(side) * contentAlpha, outlineOpacity(), m);
+            }
+        }
+        m.compactPath(clip, bounds);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(Colors.BLACK);canvas.drawPath(clip,paint);
+        if(scene.pillOutlineOpacity()>.01f) drawCompactRim(canvas,m.oneDesign ? 1f : .5f);
+        int save=canvas.save();canvas.clipPath(clip);
+        float p=page.fraction();
+        Node from = slot == 0 ? page.from.main : page.from.right;
+        Node to = slot == 0 ? page.to.main : page.to.right;
+        boolean unchanged = from == to;
         float blur=Math.max(1-contentAlpha,unchanged ? 0 : 4*p*(1-p)*.65f);
         for(int incoming=0;incoming<(unchanged ? 1 : 2);incoming++) {
             float alpha=contentAlpha*(unchanged ? 1 : incoming==1 ? p : 1-p);
             if(alpha<.002f) continue;
-            Node node=(incoming==1 ? page.to : page.from).get(slot);
-            Canvas layer=page.blur[slot*2+incoming].begin(canvas,bounds,blur,m.dp(ContentBlur.RADIUS_DP));
-            int shift=layer.save();
-            if(!unchanged) layer.translate(page.direction*m.dp(slot==0 ? 22 : 8)*(incoming==1 ? 1-p : -p),0);
-            drawCompact(layer,node,bounds,slot,alpha);
-            layer.restoreToCount(shift);page.blur[slot*2+incoming].end(canvas,layer);
+            Node node = incoming == 1 ? to : from;
+            if (node == null) continue;
+            ContentBlur effect = page.blur[slot * 2 + incoming];
+            Canvas layer = effect.begin(canvas, bounds, blur, m.dp(ContentBlur.RADIUS_DP));
+            int shift = layer.save();
+            if (!unchanged) layer.translate(page.direction * m.dp(slot == 0 ? 22 : 8) * (incoming == 1 ? 1 - p : -p), 0);
+            drawCompact(layer, node, bounds, slot, alpha);
+            layer.restoreToCount(shift);
+            effect.end(canvas, layer);
         }
-        if(slot==1 && page.to.size()>2) drawOverflow(canvas,bounds,page.to.size()-2,contentAlpha);
+        if (slot == 1 && rowCount > 2) drawOverflow(canvas, bounds, rowCount - 2, contentAlpha);
         canvas.restoreToCount(save);
     }
+
     private void drawMovingGlows(Canvas canvas) {
         if(!ModuleSettings.ambientGlow() || scene.cards.isEmpty()) return;
         int save=canvas.save();
         glowExclusion.reset();
         for(Card card:scene.cards) {
             view.computeCard(card,glowBounds);
-            float corner=corner(card,glowBounds,m.pillH,m.cardRadius);
-            glowExclusion.addRoundRect(glowBounds,corner,corner,Path.Direction.CW);
+            float corner=corner(card,glowBounds,m);
+            float amount = m.oneDesign ? CompactShape.cardAmount(card, glowBounds) : 0f;
+            CompactShape.path(outlineSurface, glowBounds, corner, amount);
+            glowExclusion.addPath(outlineSurface);
         }
         // This layer is above native card slots. A halo must never tint their opaque foregrounds.
         canvas.clipOutPath(glowExclusion);
@@ -973,10 +1110,13 @@ final class IMode {
             view.computeCard(card,outlineBounds);
             float opacity=IslandView.clamp01(card.iModeOpacity.value());
             if(!card.iMode || opacity<.003f) continue;
-            float corner=corner(card,outlineBounds,m.pillH,m.cardRadius);
+            float corner=corner(card,outlineBounds,m);
             boolean frosted=dev.android.dynamicisland.island.material.FrostedSurface.requested();
             if(frosted) dev.android.dynamicisland.island.material.MaterialShape.path(outlineSurface,outlineBounds,corner,materialPower(card,m.pillH));
-            else { outlineSurface.reset();outlineSurface.addRoundRect(outlineBounds,corner,corner,Path.Direction.CW); }
+            else {
+                float amount = m.oneDesign ? CompactShape.cardAmount(card, outlineBounds) : 0f;
+                CompactShape.path(outlineSurface, outlineBounds, corner, amount);
+            }
             float opening=IslandView.clamp01((card.h.value()-m.pillH)/Math.max(1,card.body.h-m.pillH));
             // A material's intrinsic rim is separate from this pill contrast outline. Keep the
             // latter on the same exterior contour before, during and after the native card slot.
@@ -984,7 +1124,7 @@ final class IMode {
             if(alpha>.002f) {
                 int save=canvas.save();canvas.clipOutPath(outlineOcclusion);
                 paint.setShader(null);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(m.outlineW);
-                paint.setColor(Colors.withAlpha(Colors.PILL_OUTLINE,alpha));
+                paint.setColor(Colors.withAlpha(m.outlineColor(),alpha));
                 canvas.drawPath(outlineSurface,paint);
                 paint.setStyle(Paint.Style.FILL);canvas.restoreToCount(save);
             }
@@ -996,7 +1136,7 @@ final class IMode {
     private void drawCompact(Canvas canvas,Node n,RectF r,float iconOnly,float alpha) {
         if(iconOnly<.999f) {
             // A wider capsule adds space between its leading/trailing contents. It must not widen
-            // the artwork, glyphs, digits or waveform. Only shrink uniformly while returning to a bubble.
+            // the artwork, glyphs, digits or waveform. Shrink uniformly during the fold.
             float scale=Math.max(.001f,Math.min(1,Math.min(r.height()/m.pillH,r.width()/n.compact.desiredWidth())));
             float width=r.width()/scale;
             RectF natural=compactNatural;
@@ -1004,12 +1144,13 @@ final class IMode {
             int save=canvas.save();canvas.scale(scale,scale,r.centerX(),r.centerY());
             n.compact.draw(canvas,natural,alpha*(1-iconOnly),1000);canvas.restoreToCount(save);
         }
-        if(iconOnly>.001f) {
-            float d=Math.min(r.width(),r.height());
-            RectF bubble=new RectF(r.centerX()-d/2,r.centerY()-d/2,r.centerX()+d/2,r.centerY()+d/2);
-            n.bubble.draw(canvas,bubble,alpha*iconOnly,1000);
+        if (n.bubble != null && iconOnly > .001f) {
+            float radius = Math.min(r.width(), r.height()) / 2f;
+            compactIcon.set(r.centerX() - radius, r.centerY() - radius, r.centerX() + radius, r.centerY() + radius);
+            n.bubble.draw(canvas, compactIcon, alpha * iconOnly, 1000);
         }
     }
+
     private void drawOverflow(Canvas canvas,RectF r,int extra,float alpha) {
         paint.setStyle(Paint.Style.FILL);paint.setColor(Colors.withAlpha(Colors.BLACK,.9f*alpha));
         canvas.drawRoundRect(r.centerX()-m.dp(10),r.bottom-m.dp(12),r.centerX()+m.dp(10),r.bottom-m.dp(1),m.dp(5),m.dp(5),paint);
@@ -1036,10 +1177,13 @@ final class IMode {
         return amount*amount;
     }
 
-    static float corner(Card card,RectF r,float pillHeight,float maximum) {
-        float progress=IslandView.clamp01((card.h.value()-pillHeight)/Math.max(1,card.body.h-pillHeight));
+    static float corner(Card card, RectF r, Metrics m) {
+        if (m.oneDesign && !dev.android.dynamicisland.island.material.FrostedSurface.requested()) {
+            return Math.min(r.width() / 2f, card.body.cornerRadius(m.cardRadius, r.height()));
+        }
+        float progress=IslandView.clamp01((card.h.value()-m.pillH)/Math.max(1,card.body.h-m.pillH));
         float compact=Math.min(r.width(),r.height())/2;
-        float expanded=card.body.cornerRadius(maximum,card.body.h);
+        float expanded=card.body.cornerRadius(m.cardRadius,card.body.h);
         return Math.min(compact,compact+(expanded-compact)*progress);
     }
     static float materialPower(Card card,float pillHeight) {
@@ -1065,7 +1209,7 @@ final class IMode {
         for(Node n:nodes.values()) {
             n.x.snapTo(n.target.centerX());n.y.snapTo(n.target.centerY());
             n.w.snapTo(n.target.width());n.h.snapTo(n.target.height());
-            n.alpha.snapTo(n.slot>=0 && !n.removed && !gestureHidden ? 1 : 0);n.iconOnly.snapTo(n.slot==0 ? 0 : 1);
+            n.alpha.snapTo(n.slot!=OFF_ROW && !n.removed && !gestureHidden ? 1 : 0);n.iconOnly.snapTo(n.slot==0 ? 0 : 1);
             n.presence.snapTo(n.alpha.value());
             n.press.snapTo(1);
         }

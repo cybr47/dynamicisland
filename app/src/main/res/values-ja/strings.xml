@@ -8,6 +8,12 @@
     <string name="setting_shade_media">通知パネルの音楽プレーヤー</string>
     <string name="setting_shade_media_desc">通知パネルにアイランドの音楽カードを表示します。</string>
     <string name="setting_color_icons_desc">コンパクト表示でアプリやチームの元の色を保ちます。</string>
+    <string name="island_style">スタイル</string>
+    <string name="style_pill">ピル型</string>
+    <string name="style_one_design">OneDesign</string>
+    <string name="wider_album_cover">横長のアルバムカバー</string>
+    <string name="wider_album_cover_desc">音楽再生中、コンパクト表示のアルバムカバーを横長に切り抜きます。</string>
+    <string name="app_icon_zoom">アプリアイコンの拡大率</string>
     <string name="setting_visualizer">音声波形</string>
     <string name="setting_visualizer_desc">実際の音声出力に合わせて波形を動かします。オフでは穏やかなアニメーションを使います。</string>
     <string name="setting_paused_timeout">一時停止中の音楽を保持する時間</string>

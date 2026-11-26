@@ -222,6 +222,7 @@ final class OaCardBuilder {
         if (appIcon == null) {
             appIcon = icons.appIcon(pkg);
         }
+        it.appIcon = appIcon;
         it.cardImage = appIcon;
         if (it.progressStyle && n != null && n.getLargeIcon() != null) {
             Drawable large = icons.load(n.getLargeIcon(), pkg);
@@ -236,6 +237,7 @@ final class OaCardBuilder {
         }
         it.cardIcon = icons.mirroredAppIcon(pkg, n);
         if (it.cardIcon != null) {
+            it.appIcon = it.cardIcon;
             CharSequence detail = HideDuplicated.originalSubText(
                     n.extras.getCharSequence("android.title"), n.extras.getCharSequence("android.subText"));
             if (detail != null && !detail.toString().equals(String.valueOf(it.subtitle))) {

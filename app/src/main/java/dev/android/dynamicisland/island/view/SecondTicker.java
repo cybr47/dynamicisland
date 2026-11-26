@@ -1,6 +1,5 @@
 package dev.android.dynamicisland.island.view;
 
-import dev.android.dynamicisland.island.graphics.Motion;
 import dev.android.dynamicisland.island.model.IslandItem;
 import dev.android.dynamicisland.xposed.XLog;
 
@@ -16,13 +15,15 @@ final class SecondTicker {
     private final IslandView view;
     private final Scene scene;
     private final StackPainter stack;
+    private final Director director;
     private final Runnable tick = this::onTick;
     private boolean posted;
 
-    SecondTicker(IslandView view, Scene scene, StackPainter stack) {
+    SecondTicker(IslandView view, Scene scene, StackPainter stack, Director director) {
         this.view = view;
         this.scene = scene;
         this.stack = stack;
+        this.director = director;
     }
 
     /** Posts the next tick unless one is pending or nothing needs ticking. */
@@ -69,7 +70,7 @@ final class SecondTicker {
         }
         CompactContent content = (CompactContent) main.content;
         if (content.item.trailing == IslandItem.Trailing.CHRONOMETER && content.remeasure()) {
-            scene.springs.width.animateTo(scene.pillWidthFor(content), Motion.PILL_RESIZE);
+            director.resizeCompact();
             view.scheduleFrame();
         }
     }

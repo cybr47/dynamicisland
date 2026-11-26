@@ -169,6 +169,7 @@ public final class PromotedSource {
         it.postTime = sbn.getPostTime();
         it.accent = n.color != 0 ? Colors.readableOnBlack(n.color) : DEFAULT_ACCENT;
         Drawable appIcon = apps.icon(pkg);
+        it.appIcon = appIcon;
         it.icon = appIcon;
         it.iconIsImage = true;
         it.cardImage = appIcon;

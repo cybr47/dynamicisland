@@ -13,21 +13,11 @@ import dev.android.dynamicisland.island.graphics.Metaball;
 import dev.android.dynamicisland.island.model.IslandItem;
 import dev.android.dynamicisland.settings.ModuleSettings;
 
-/**
- * Draws the pill, the bubble next to it, the neck of goo that joins them, the thin outline around the group,
- * the bridge to the first card and the contents (layers) inside pill and bubble.
- */
+/** Draws the compact pill, its side handles and the bridge to the first expanded card. */
 final class PillPainter {
     private static final float LAYER_SLIDE_DP = 18.0f;
     /** How far the notch body reaches past the top edge of the screen, so no top edge or corner of it is seen. */
     private static final float NOTCH_OVERREACH_DP = 12.0f;
-    /** How strongly the neck bulges while the bubble is still touching the pill. */
-    private static final float MAX_NECK_SPREAD = 0.55f;
-    /** The bubble's content only shows once the bubble has split off this far, fully at +0.4. */
-    private static final float BUBBLE_CONTENT_FROM = 0.55f;
-    private static final float BUBBLE_CONTENT_RANGE = 0.4f;
-    /** The shade gate (1 = there, 0 = gone): the bubble has merged into the pill by here, the content is gone before this. */
-    private static final float SHADE_MERGED_BY = 0.55f;
     private static final float SHADE_CONTENT_GONE_BY = 0.45f;
     private static final float SHADE_CONTENT_RANGE = 0.4f;
 
@@ -36,22 +26,23 @@ final class PillPainter {
     private final Scene scene;
     private final Springs sp;
     private final Shapes shapes;
-    private final StackPainter stack;
     private final CardBridge bridge;
-    private final Path clip = new Path();
+    private final StackPainter stack;
+    private final RectF bubble = new RectF();
+    private final Path neck = new Path();
+    private final Path bodyCutout = new Path();
+    private final HeadlineHandles handles = new HeadlineHandles();
+    private final Path notchContentClip = new Path();
     private final Path glowCutout = new Path();
     private final AmbientGlow glow, bubbleGlow;
     private final GlowMotion glowMotion = new GlowMotion();
     private final Tween glowPresence = new Tween(0, 1200);
     private IslandItem lastGlowSession;
     private float glowAlpha;
-    private final Path outlineCutout = new Path();
-    private final Path neck = new Path();
-    private final RectF bubble = new RectF();
     private final RectF outlineRect = new RectF();
     private final RectF shrunk = new RectF();
-    private final Path notchBody = new Path();
-    private final Path notchRim = new Path();
+    private final Path pillPath = new Path();
+    private final Path rimPath = new Path();
 
     PillPainter(Metrics m, Paints paints, Scene scene, Shapes shapes, StackPainter stack, CardBridge bridge) {
         this.m = m;
@@ -59,71 +50,58 @@ final class PillPainter {
         this.scene = scene;
         this.sp = scene.springs;
         this.shapes = shapes;
-        this.stack = stack;
         this.bridge = bridge;
+        this.stack = stack;
         glow = new AmbientGlow(m.dp(1));
         bubbleGlow = new AmbientGlow(m.dp(1));
     }
 
-    private static boolean legacyMerge() {
-        return ModuleSettings.legacyAnimation();
-    }
-
-    /** Draws pill and bubble; {@code pill} is the pill's rectangle for this frame. */
+    /** Draws the compact row in the pill's rectangle for this frame. */
     void draw(Canvas canvas, RectF full, long t) {
-        // while the shade comes down the bubble merges into the pill, then the body shrinks into a dot with its content
-        // growing smaller and fading; the other way round when the shade has gone
         float gate = IslandView.clamp01(sp.shadeGate.value());
         shapes.shadePill(full, shrunk);
         RectF pill = shrunk;
         float contentScale = pill.width() / Math.max(1.0f, full.width());
         float contentAlpha = clamp01((gate - SHADE_CONTENT_GONE_BY) / SHADE_CONTENT_RANGE);
-        float split = sp.split.value() * clamp01((gate - SHADE_MERGED_BY) / (1.0f - SHADE_MERGED_BY));
-        float r = pill.height() / 2.0f;
-        // the bubble also stays while a stack opens: it merges back into the pill instead of vanishing in one frame
-        boolean hasBubble = split > 0.003f && (scene.mode != Mode.EXPANDED || !legacyMerge());
-        boolean hasNeck = false;
-        float neckAlpha = 0.0f;
-        float bubbleX = 0.0f;
-        float bubbleY = 0.0f;
-        float bubbleRadius = 0.0f;
+        float leftHandle = m.oneDesign ? shapes.handlePresence(-1) : 0f;
+        float rightHandle = m.oneDesign ? shapes.handlePresence(1) : 0f;
+        float outline = clamp01(sp.outlineFade.value()) * scene.pillOutlineOpacity();
+        Director.ClassicPage page = scene.classicPage;
+        if (page != null) {
+            drawCompactGlow(canvas, pill, contentAlpha);
+            page.draw(canvas, handles, pill, page.from, page.to, Scene.pillBodyColor(page.from.item),
+                    Scene.pillBodyColor(page.to.item), contentAlpha, outline, contentAlpha);
+            return;
+        }
+        float r = pill.height() / 2f;
+        float split = m.oneDesign ? 0f : sp.split.value() * clamp01((gate - .55f) / .45f);
+        boolean hasBubble = split > .003f && (scene.mode != Mode.EXPANDED || !ModuleSettings.legacyAnimation());
+        float neckAlpha = 0f;
+        bubble.setEmpty();
         if (hasBubble) {
             shapes.bubble(pill, split, bubble);
-            bubbleRadius = bubble.width() / 2.0f;
-            bubbleX = bubble.centerX();
-            bubbleY = bubble.centerY();
-            float pillX = pill.right - r;
-            float pillY = pill.centerY();
-            float distance = bubbleX - pillX;
-            float touching = r + bubbleRadius;
-            float rest = r + m.bubbleGap + m.bubbleR;
-            float spread = distance <= touching
-                    ? MAX_NECK_SPREAD
-                    : (1.0f - clamp01((distance - touching) / Math.max(1.0f, (rest - touching) - m.dp(0.5f)))) * MAX_NECK_SPREAD;
-            neck.reset();
-            neckAlpha = spread > 0.01f ? stack.neckAlpha(Metaball.neck(pillX, pillY, r, bubbleX, bubbleY, bubbleRadius, spread, neck)) : 0.0f;
-            hasNeck = neckAlpha > 0.0f;
+            neckAlpha = bubbleNeck(pill, r);
         }
         LiquidBridge cardBridge = bridge.update(t, pill, r);
         boolean pillVisible = pill.width() > IslandView.MIN_VISIBLE_SIZE && pill.height() > IslandView.MIN_VISIBLE_SIZE;
-        // the notch shape only holds while the pill rests as the pill: while it merges with a bubble, a card or the
-        // shade it is the usual capsule, which those transitions are built on
-        boolean notch = pillVisible && !hasBubble && !hasNeck && cardBridge == null && gate >= 0.999f
+        // The notch shape holds when only the pill is on screen.
+        boolean notch = pillVisible && !hasBubble && Math.max(leftHandle, rightHandle) <= .003f && cardBridge == null && gate >= 0.999f
                 && (scene.mode == Mode.COMPACT || scene.restingShown()) && ModuleSettings.notchStyle();
         if (notch) {
-            NotchShape.body(notchBody, pill, r, m.dp(NOTCH_OVERREACH_DP));
+            NotchShape.body(pillPath, pill, r, m.dp(NOTCH_OVERREACH_DP));
+        } else {
+            m.compactPath(pillPath, pill);
         }
+        bodyCutout.rewind();
+        if (pillVisible) bodyCutout.addPath(pillPath);
+        if (hasBubble) bodyCutout.addOval(bubble, Path.Direction.CW);
+        if (neckAlpha > 0f) bodyCutout.addPath(neck);
 
         // A returning compact body stays opaque; pillBlob only gates its content until the fold finishes.
         float bodyAlpha = scene.mode == Mode.COMPACT ? 1.0f : clamp01(sp.pillBlob.value());
         if (ModuleSettings.ambientGlow() && bodyAlpha > IslandView.MIN_VISIBLE_ALPHA) {
             int save = canvas.save();
-            glowCutout.reset();
-            if (notch) glowCutout.addPath(notchBody);
-            else if (pillVisible) glowCutout.addRoundRect(pill, r, r, Path.Direction.CW);
-            if (hasBubble) glowCutout.addCircle(bubbleX, bubbleY, bubbleRadius, Path.Direction.CW);
-            canvas.clipOutPath(glowCutout);
-            if (hasNeck) canvas.clipOutPath(neck);
+            canvas.clipOutPath(bodyCutout);
             // Also prime state if Android draws before admitting the first animation frame.
             stepGlow(0, null);
             float alpha = bodyAlpha * clamp01(contentScale) * glowAlpha;
@@ -132,56 +110,76 @@ final class PillPainter {
             canvas.restoreToCount(save);
         }
         boolean outlinePill = pillVisible && (scene.mode == Mode.COMPACT || scene.restingShown()) && bodyAlpha > IslandView.MIN_VISIBLE_ALPHA;
-        if ((outlinePill || hasBubble) && sp.outlineFade.value() > IslandView.MIN_VISIBLE_ALPHA
-                && scene.pillOutlineOpacity() > IslandView.MIN_VISIBLE_ALPHA) {
-            drawOutline(canvas, pill, r, outlinePill, notch, bodyAlpha, hasBubble, hasNeck, neckAlpha, bubbleX, bubbleY, bubbleRadius);
+        if ((outlinePill || hasBubble) && outline > IslandView.MIN_VISIBLE_ALPHA) {
+            drawOutline(canvas, pill, r, notch, outlinePill ? outline * bodyAlpha : 0f, outline, neckAlpha);
         }
 
         int mainColor = bodyColor(scene.mainIn);
         paints.shape.setColor(mainColor);
         paints.shape.setAlpha(Math.round(bodyAlpha * 255.0f));
-        if (notch) {
-            canvas.drawPath(notchBody, paints.shape);
-        } else if (pillVisible) {
-            canvas.drawRoundRect(pill, r, r, paints.shape);
+        if (pillVisible) {
+            canvas.drawPath(pillPath, paints.shape);
         }
         paints.shape.setColor(Colors.BLACK);
         if (cardBridge != null) {
             bridge.draw(canvas, cardBridge);
         }
         paints.shape.setAlpha(255);
-        if (hasBubble) {
-            paints.shape.setColor(mainColor);
-            if (hasNeck) {
-                paints.shape.setAlpha(Math.round(255.0f * neckAlpha));
+        if (m.oneDesign) {
+            handles.draw(canvas, pill, -1, leftHandle, outline, m);
+            handles.draw(canvas, pill, 1, rightHandle, outline, m);
+        } else if (hasBubble) {
+            if (neckAlpha > 0f) {
+                paints.shape.setColor(Colors.withAlpha(mainColor, neckAlpha));
                 canvas.drawPath(neck, paints.shape);
             }
             paints.shape.setColor(bodyColor(scene.bubbleIn));
-            canvas.drawCircle(bubbleX, bubbleY, bubbleRadius, paints.shape);
+            canvas.drawOval(bubble, paints.shape);
             paints.shape.setColor(Colors.BLACK);
         }
 
         if (pillVisible && contentAlpha > IslandView.MIN_VISIBLE_ALPHA) {
             int contentSave = canvas.save();
+            if (notch) {
+                // Keep the notch content inside its ordinary layout below the top edge.
+                float radius = full.height() / 2f;
+                notchContentClip.rewind();
+                notchContentClip.addRoundRect(full, radius, radius, Path.Direction.CW);
+                canvas.clipPath(notchContentClip);
+            } else {
+                canvas.clipPath(pillPath);
+            }
             if (Math.abs(contentScale - 1.0f) > 0.001f) {
                 canvas.scale(contentScale, contentScale, full.centerX(), full.centerY());
             }
-            // the content keeps its full-size layout and is clipped to the (still shrinking) body
-            drawPillContent(canvas, full, full.height() / 2.0f, t, contentAlpha);
+            drawPillContent(canvas, full, t, contentAlpha);
             canvas.restoreToCount(contentSave);
         }
-        if (hasBubble && split > BUBBLE_CONTENT_FROM) {
-            float extra = clamp01((split - BUBBLE_CONTENT_FROM) / BUBBLE_CONTENT_RANGE) * contentAlpha;
-            drawBubbleLayer(canvas, scene.bubbleOut, t, extra);
-            drawBubbleLayer(canvas, scene.bubbleIn, t, extra);
+        if (hasBubble && split > .55f) {
+            float alpha = clamp01((split - .55f) / .4f) * contentAlpha;
+            drawBubbleLayer(canvas, scene.bubbleOut, t, alpha);
+            drawBubbleLayer(canvas, scene.bubbleIn, t, alpha);
         }
+    }
+
+    private float bubbleNeck(RectF pill, float pillRadius) {
+        float bubbleRadius = bubble.width() / 2f;
+        float pillX = pill.right - pillRadius;
+        float distance = bubble.centerX() - pillX;
+        float touching = pillRadius + bubbleRadius;
+        float rest = pillRadius + m.bubbleGap + m.bubbleR;
+        float spread = .55f * (1f - clamp01((distance - touching) / Math.max(1f, rest - touching - m.dp(.5f))));
+        neck.rewind();
+        if (spread <= .01f) return 0f;
+        return stack.neckAlpha(Metaball.neck(pillX, pill.centerY(), pillRadius,
+                bubble.centerX(), bubble.centerY(), bubbleRadius, spread, neck));
     }
 
     void drawCompactGlow(Canvas canvas,RectF bounds,float alpha) {
         if(!ModuleSettings.ambientGlow() || glowAlpha<.002f) return;
         int save=canvas.save();
-        glowCutout.reset();float r=bounds.height()/2;
-        glowCutout.addRoundRect(bounds,r,r,Path.Direction.CW);canvas.clipOutPath(glowCutout);
+        m.compactPath(glowCutout, bounds);
+        canvas.clipOutPath(glowCutout);
         glow.draw(canvas,bounds,glowMotion,alpha*glowAlpha,ModuleSettings.glowStrength());
         canvas.restoreToCount(save);
     }
@@ -208,41 +206,32 @@ final class PillPainter {
         return glowPresence.running(now) || (glowAlpha > 0 && moving);
     }
 
-    /** Only the outer rim is white. Filling underneath a fading black body produces a grey pill. */
-    private void drawOutline(Canvas canvas, RectF pill, float r, boolean pillVisible, boolean notch, float bodyAlpha, boolean hasBubble, boolean hasNeck,
-                             float neckAlpha, float bubbleX, float bubbleY, float bubbleRadius) {
+    /** Paint the contrast rim outside the dark body. */
+    private void drawOutline(Canvas canvas, RectF pill, float r, boolean notch, float alpha,
+                             float bubbleOutline, float neckAlpha) {
         int save = canvas.save();
-        outlineCutout.reset();
-        if (pillVisible) {
-            if (notch) outlineCutout.addPath(notchBody);
-            else outlineCutout.addRoundRect(pill, r, r, Path.Direction.CW);
-        }
-        if (hasBubble) outlineCutout.addCircle(bubbleX, bubbleY, bubbleRadius, Path.Direction.CW);
-        canvas.clipOutPath(outlineCutout);
-        if (hasNeck) canvas.clipOutPath(neck);
-        float fade = clamp01(sp.outlineFade.value());
+        canvas.clipOutPath(bodyCutout);
         Paint paint = paints.outline;
-        paint.setStyle(Paint.Style.FILL);
-        if (pillVisible) {
-            paint.setColor(Colors.withAlpha(Colors.PILL_OUTLINE, fade * bodyAlpha));
+        paint.setColor(Colors.withAlpha(m.outlineColor(), alpha));
+        if (notch && alpha > 0f) {
             outlineRect.set(pill);
             outlineRect.inset(-m.outlineW, -m.outlineW);
-            if (notch) {
-                NotchShape.body(notchRim, outlineRect, r + m.outlineW, m.dp(NOTCH_OVERREACH_DP));
-                canvas.drawPath(notchRim, paint);
-            } else {
-                canvas.drawRoundRect(outlineRect, r + m.outlineW, r + m.outlineW, paint);
-            }
+            NotchShape.body(rimPath, outlineRect, r + m.outlineW, m.dp(NOTCH_OVERREACH_DP));
+            canvas.drawPath(rimPath, paint);
+        } else if (alpha > 0f) {
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(2f * m.outlineW);
+            canvas.drawPath(pillPath, paint);
+            paint.setStyle(Paint.Style.FILL);
         }
-        if (hasBubble) {
-            paint.setColor(Colors.withAlpha(Colors.PILL_OUTLINE, fade));
-            canvas.drawCircle(bubbleX, bubbleY, bubbleRadius + m.outlineW, paint);
-            if (hasNeck) {
-                // squared: the outline is wider than the black neck, so it must fade before the neck is thin
-                paint.setColor(Colors.withAlpha(Colors.PILL_OUTLINE,
-                        fade * (ModuleSettings.legacyAnimation() ? neckAlpha : neckAlpha * neckAlpha)));
+        if (!bubble.isEmpty()) {
+            paint.setColor(Colors.withAlpha(m.outlineColor(), bubbleOutline));
+            canvas.drawCircle(bubble.centerX(), bubble.centerY(), bubble.width() / 2f + m.outlineW, paint);
+            if (neckAlpha > 0f) {
+                float fade = ModuleSettings.legacyAnimation() ? neckAlpha : neckAlpha * neckAlpha;
+                paint.setColor(Colors.withAlpha(m.outlineColor(), bubbleOutline * fade));
                 paint.setStyle(Paint.Style.FILL_AND_STROKE);
-                paint.setStrokeWidth(m.outlineW * 2.0f);
+                paint.setStrokeWidth(2f * m.outlineW);
                 canvas.drawPath(neck, paint);
                 paint.setStyle(Paint.Style.FILL);
             }
@@ -250,18 +239,30 @@ final class PillPainter {
         canvas.restoreToCount(save);
     }
 
-    private void drawPillContent(Canvas canvas, RectF pill, float r, long t, float extraAlpha) {
-        int save = canvas.save();
-        clip.reset();
-        clip.addRoundRect(pill, r, r, Path.Direction.CW);
-        canvas.clipPath(clip);
+    private void drawBubbleLayer(Canvas canvas, Layer layer, long t, float extraAlpha) {
+        if (layer == null) {
+            return;
+        }
+        float alpha = layer.alpha(t) * extraAlpha;
+        if (alpha > IslandView.MIN_VISIBLE_ALPHA) {
+            float merging = 1 - clamp01(sp.split.value());
+            float blur = Math.max(layer.blurAmount(t), merging);
+            Canvas content = layer.contentBlur.begin(canvas, bubble, blur, m.dp(ContentBlur.RADIUS_DP));
+            try {
+                layer.content.draw(content, bubble, alpha, layer.elapsedIn(t));
+            } finally {
+                layer.contentBlur.end(canvas, content);
+            }
+        }
+    }
+
+    private void drawPillContent(Canvas canvas, RectF pill, long t, float extraAlpha) {
         if (scene.mainOut != null) {
             drawLayer(canvas, scene.mainOut, pill, t, extraAlpha);
         }
         if (scene.mainIn != null && scene.mode != Mode.EXPANDED) {
             drawLayer(canvas, scene.mainIn, pill, t, extraAlpha);
         }
-        canvas.restoreToCount(save);
     }
 
     /** The pill takes its item's team colour while compact; otherwise (and while a card is out) it is black. */
@@ -288,20 +289,4 @@ final class PillPainter {
         }
     }
 
-    private void drawBubbleLayer(Canvas canvas, Layer layer, long t, float extraAlpha) {
-        if (layer == null) {
-            return;
-        }
-        float alpha = layer.alpha(t) * extraAlpha;
-        if (alpha > IslandView.MIN_VISIBLE_ALPHA) {
-            float merging = 1 - clamp01(sp.split.value());
-            float blur = Math.max(layer.blurAmount(t), merging);
-            Canvas content = layer.contentBlur.begin(canvas, bubble, blur, m.dp(ContentBlur.RADIUS_DP));
-            try {
-                layer.content.draw(content, bubble, alpha, layer.elapsedIn(t));
-            } finally {
-                layer.contentBlur.end(canvas, content);
-            }
-        }
-    }
 }

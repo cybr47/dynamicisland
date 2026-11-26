@@ -2,6 +2,8 @@ package dev.android.dynamicisland.settings;
 
 import static org.junit.Assert.*;
 import android.content.SharedPreferences;
+import android.view.View;
+import android.view.ViewGroup;
 import dev.android.dynamicisland.R;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -28,6 +30,59 @@ public class IModeSettingsTest {
             prefs.edit().clear().commit();ModuleSettings.configurePreview(prefs);
         }
     }
+    @Test public void oneDesignControlsAppearOnlyForThatStyleAndKeepTheirValues() {
+        try (var controller = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            SettingsActivity activity = controller.get();
+            SharedPreferences prefs = ReflectionHelpers.getField(activity, "prefs");
+            try {
+                prefs.edit().clear()
+                        .putBoolean(ModuleSettings.KEY_WIDER_ALBUM_COVER, true)
+                        .putInt(ModuleSettings.KEY_APP_ICON_ZOOM, 125).commit();
+                activity.openSetting(SettingsSearchCatalog.Route.APPEARANCE, R.string.island_style, 0);
+                String zoom = activity.getString(R.string.app_icon_zoom);
+                String cover = activity.getString(R.string.wider_album_cover);
+
+                assertTrue(styleRow(activity, R.string.style_pill).isSelected());
+                assertFalse(styleRow(activity, R.string.style_one_design).isSelected());
+                assertNull(activity.page().findViewWithTag(zoom));
+                assertNull(activity.page().findViewWithTag(cover));
+
+                styleRow(activity, R.string.style_one_design).performClick();
+                assertTrue(ModuleSettings.oneDesign());
+                assertFalse(styleRow(activity, R.string.style_pill).isSelected());
+                assertTrue(styleRow(activity, R.string.style_one_design).isSelected());
+                assertNotNull(activity.page().findViewWithTag(zoom));
+                assertNotNull(activity.page().findViewWithTag(cover));
+
+                styleRow(activity, R.string.style_pill).performClick();
+                assertFalse(ModuleSettings.oneDesign());
+                assertNull(activity.page().findViewWithTag(zoom));
+                assertNull(activity.page().findViewWithTag(cover));
+
+                styleRow(activity, R.string.style_one_design).performClick();
+                assertTrue(ModuleSettings.widerAlbumCover());
+                assertEquals(125, ModuleSettings.appIconZoom());
+            } finally {
+                prefs.edit().clear().commit();
+                ModuleSettings.configurePreview(prefs);
+            }
+        }
+    }
+
+    private View styleRow(SettingsActivity activity, int label) {
+        ViewGroup page = activity.page();
+        ViewGroup group = page.findViewWithTag(activity.getString(R.string.island_style));
+        View animation = page.findViewWithTag(activity.getString(R.string.anim_title));
+        assertNotNull(group);
+        assertNotNull(animation);
+        assertTrue(page.indexOfChild(group) < page.indexOfChild(animation));
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View row = group.getChildAt(i);
+            if (activity.getString(label).equals(row.getContentDescription())) return row;
+        }
+        throw new AssertionError("Missing style option " + activity.getString(label));
+    }
+
     /** Taps one row of the animation radio list; the live preview plays the result. */
     private void choose(SettingsActivity activity,int index) {
         android.view.ViewGroup card=(android.view.ViewGroup)activity.page().findViewWithTag(activity.getString(R.string.anim_title));

@@ -47,7 +47,7 @@ final class BodyFactory {
                 return new dev.android.dynamicisland.island.view.card.BatteryBody(view, it, width);
             }
             if (it.eventLayout == IslandItem.EventLayout.DEVICE || it.eventLayout == IslandItem.EventLayout.STATUS) {
-                return new dev.android.dynamicisland.island.view.card.EventBody(view, it, width);
+                return new dev.android.dynamicisland.island.view.card.EventBody(view, it, width, view.oneDesign() && !inShade);
             }
         }
         // a message popup has its own card (avatar, text); the other live cards, ProgressStyle ones included, all share
@@ -63,7 +63,9 @@ final class BodyFactory {
             }
         }
         if (isTimerLike(it)) {
-            return new TimerBody(view, it, width);
+            boolean headline = view.oneDesign() && !inShade && it.kind == IslandItem.Kind.TIMER
+                    && "com.sec.android.app.clockpackage".equals(it.packageName);
+            return new TimerBody(view, it, width, headline);
         }
         try {
             return new LiveBody(view, it, width);

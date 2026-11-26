@@ -1,11 +1,10 @@
 package dev.android.dynamicisland.island.view;
 
-import static dev.android.dynamicisland.island.graphics.Easing.lerp;
-
 import android.graphics.RectF;
+import dev.android.dynamicisland.island.graphics.Easing;
 
 /**
- * Turns the current spring values into rectangles: the pill, the split-off bubble and the cards, including
+ * Turns the current spring values into rectangles: the pill, the side handles and the cards, including
  * the squash and stretch that make them read as liquid.
  */
 final class Shapes {
@@ -39,6 +38,7 @@ final class Shapes {
     /** The pill. Squash and stretch: it flattens while it widens fast and narrows while it grows in height. */
     void main(RectF out) {
         if (scene.iMode != null) { scene.iMode.mainBounds(out); return; }
+        if (scene.classicPage != null) { out.set(scene.classicPage.main); return; }
         float w = Math.max(0.0f, sp.width.value());
         float h = Math.max(0.0f, sp.height.value());
         float squash = PILL_SQUASH * clampUnit(sp.width.velocity() / m.dp(PILL_SQUASH_SPEED_DP));
@@ -72,20 +72,46 @@ final class Shapes {
         out.set(cx - width / 2.0f, cy - height / 2.0f, cx + width / 2.0f, cy + height / 2.0f);
     }
 
-    /** The bubble: a circle that grows out of the pill's right end as the split progresses. */
-    void bubble(RectF main, RectF out) {
-        bubble(main, sp.split.value(), out);
-    }
-
-    /** The bubble for an explicit split (the shade gate merges it back into the pill before the pill shrinks). */
-    void bubble(RectF main, float s, RectF out) {
-        if (scene.iMode != null) { scene.iMode.bubbleBounds(out);scene.iMode.shadeBounds(out,out); return; }
-        float pillRadius = main.height() / 2.0f;
-        float radius = lerp(IslandView.PAUSED_GLOW * pillRadius, m.bubbleR, IslandView.clamp01(s));
-        float restDistance = m.bubbleGap + pillRadius + m.bubbleR;
-        float centerX = (restDistance * s) + (main.right - pillRadius);
+    /** The classic side bubble grows out of the pill's right end. */
+    void bubble(RectF main, float split, RectF out) {
+        float pillRadius = main.height() / 2f;
+        float radius = Easing.lerp(IslandView.PAUSED_GLOW * pillRadius, m.bubbleR, IslandView.clamp01(split));
+        float centerX = (m.bubbleGap + pillRadius + m.bubbleR) * split + main.right - pillRadius;
         float centerY = main.centerY();
         out.set(centerX - radius, centerY - radius, centerX + radius, centerY + radius);
+    }
+
+    void handle(RectF main, int side, RectF out) {
+        if (!m.oneDesign && scene.iMode == null) {
+            if (side > 0 && sp.split.value() > .003f) bubble(main, sp.split.value(), out);
+            else out.setEmpty();
+            return;
+        }
+        if (scene.classicPage != null) {
+            scene.classicPage.sideBounds(main, side, out);
+        } else if (scene.iMode != null) {
+            scene.iMode.handleBounds(side, out);
+            scene.iMode.shadeBounds(out, out);
+        } else {
+            HeadlineHandles.bounds(main, side, handlePresence(side), out);
+        }
+        if (out.left < m.outlineW || out.right > m.screenW - m.outlineW) out.setEmpty();
+    }
+
+    float handlePresence(int side) {
+        return IslandView.clamp01(m.oneDesign ? sp.handle(side).value() : side > 0 ? sp.split.value() : 0f) * IslandView.clamp01((sp.shadeGate.value() - .55f) / .45f);
+    }
+
+    int handleAt(float x, float y, float padding, RectF scratch) {
+        if (!m.oneDesign) return 0;
+        paintedMain(scratch);
+        int side = x < scratch.left ? -1 : x >= scratch.right ? 1 : 0;
+        if (side == 0 || handlePresence(side) < .3f) return 0;
+        if (scene.iMode == null && scene.compactNeighbor(side) == null) return 0;
+        handle(scratch, side, scratch);
+        if (scratch.isEmpty()) return 0;
+        scratch.inset(-padding, -padding);
+        return scratch.contains(x, y) ? side : 0;
     }
 
     /** A card (not necessarily its resting rectangle: swipe offsets and the stack drag are applied). */

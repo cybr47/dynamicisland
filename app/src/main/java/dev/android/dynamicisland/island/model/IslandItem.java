@@ -95,6 +95,8 @@ public final class IslandItem {
     public Drawable trailingIcon;
     /** The icon is a full-colour image and must not be tinted. */
     public boolean iconIsImage;
+    /** Full-colour launcher icon of the owning app. */
+    public Drawable appIcon;
     /** Small glyph shown before the secondary line (OngoingActivityData.mSecondaryInfoIcon). */
     public Drawable secondaryIcon;
     /** Icon in the card header. */
@@ -203,8 +205,6 @@ public final class IslandItem {
     public Bitmap art;
     /** Immutable artwork gradient; null means renderers should fall back to {@link #accent}. */
     public ArtworkPalette mediaPalette;
-    /** Launcher icon of the playing app. */
-    public Drawable appIcon;
     /** Monochrome version of {@link #appIcon} for the compact pill, may be null. */
     public Drawable appGlyph;
     public Runnable mediaPlayPause;

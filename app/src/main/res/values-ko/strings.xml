@@ -8,6 +8,12 @@
     <string name="setting_shade_media">알림창의 음악 플레이어</string>
     <string name="setting_shade_media_desc">알림창에 아일랜드 음악 카드를 표시합니다.</string>
     <string name="setting_color_icons_desc">작은 아일랜드에서 앱·팀 아이콘의 원래 색을 표시합니다.</string>
+    <string name="island_style">스타일</string>
+    <string name="style_pill">알약 스타일</string>
+    <string name="style_one_design">OneDesign</string>
+    <string name="wider_album_cover">넓은 앨범 커버</string>
+    <string name="wider_album_cover_desc">음악 재생 중 작은 아일랜드에 앨범 커버를 더 넓게 표시합니다.</string>
+    <string name="app_icon_zoom">앱 아이콘 확대율</string>
     <string name="setting_visualizer">오디오 파형</string>
     <string name="setting_visualizer_desc">음악 파형을 실제 오디오 출력으로 구동합니다. 끄면 부드러운 애니메이션을 사용합니다.</string>
     <string name="setting_paused_timeout">일시정지된 음악 유지 시간</string>

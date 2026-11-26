@@ -3,9 +3,11 @@ package dev.android.dynamicisland.island.view;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import dev.android.dynamicisland.island.graphics.Colors;
 import dev.android.dynamicisland.island.model.IslandItem;
+import dev.android.dynamicisland.settings.ModuleSettings;
 import java.util.regex.Matcher;
 
 /**
@@ -17,12 +19,15 @@ import java.util.regex.Matcher;
 public final class CompactContent extends Content {
     /** Smallest width the trailing part may be squeezed to. */
     private static final float MIN_TRAILING_DP = 20.0f;
+    private static final float WIDE_TILE_ASPECT = 1.8f;
     /** Home score, shown beside the home logo (only when the score text splits around a hole). */
     String scoreA;
     /** Away score, shown beside the away logo. */
     String scoreB;
     float scoreW;
     final boolean teams;
+    private final Drawable launcherIcon;
+    private boolean wideAlbum;
     String trailText;
     float trailW;
     String leadingLabel;
@@ -33,11 +38,18 @@ public final class CompactContent extends Content {
     CompactContent(IslandView owner, IslandItem item) {
         super(owner, item);
         teams = item.hasTeams();
+        launcherIcon = switch (item.kind) {
+            case NAVIGATION, LIVE, TASK, PEEK -> "com.android.systemui".equals(item.packageName)
+                    || "android".equals(item.packageName) ? null : item.appIcon;
+            default -> null;
+        };
         remeasure();
     }
 
     /** Recomputes the trailing text and width after the item changed; returns whether the width changed. */
     boolean remeasure() {
+        boolean before = wideAlbum;
+        wideAlbum = owner.oneDesign() && item.isMedia && item.iconIsImage && item.cardImage != null && ModuleSettings.widerAlbumCover();
         float width;
         String text = owner.trailingString(item);
         if (item.eventLayout == IslandItem.EventLayout.BATTERY && item.batteryPercent >= 0) {
@@ -51,7 +63,7 @@ public final class CompactContent extends Content {
         leadingLabelW = 0;
         if (item.compactLabel != null && item.trailing == IslandItem.Trailing.TEXT
                 && !item.compactLabel.toString().equals(text)) {
-            float lead = wideBattery() ? 0 : owner.leadSize + owner.innerGap;
+            float lead = wideBattery() ? 0 : leadingSize() + owner.innerGap;
             float room = owner.holeD > 0 ? (widthCap() - owner.holeD) / 2 - owner.holeGap - owner.padding
                     - Math.min(owner.holeTextPadding, owner.dp(16)) - lead
                     : widthCap() - owner.padding * 2 - lead - owner.innerGap
@@ -90,7 +102,7 @@ public final class CompactContent extends Content {
                 width += barW() + (text != null ? owner.innerGap : 0.0f);
             }
         }
-        boolean changed = Math.abs(width - trailW) > 0.5f;
+        boolean changed = before != wideAlbum || Math.abs(width - trailW) > 0.5f;
         trailText = text;
         trailW = width;
         return changed;
@@ -122,7 +134,7 @@ public final class CompactContent extends Content {
         if (owner.holeD > 0.0f) {
             return Math.max(minWidth, (((widthCap() - owner.holeD) / 2.0f) - owner.holeGap) - owner.padding - holeClearance());
         }
-        return Math.max(minWidth, ((widthCap() - (owner.padding * 2.0f)) - leadingWidth()) - owner.innerGap);
+        return Math.max(minWidth, widthCap() - owner.padding - leadingInset() - leadingWidth() - owner.innerGap);
     }
 
     private float holeClearance() {
@@ -136,11 +148,11 @@ public final class CompactContent extends Content {
         float width;
         if (owner.holeD > 0.0f) {
             // both sides get the width of the wider one, so the pill stays symmetric around the hole
-            float side = Math.max(leadingWidth(), trailW);
+            float side = Math.max(leadingWidth() + leadingInset(), trailW + owner.padding);
             float extra = trailW > 0 ? holeClearance() : 0;
-            width = owner.holeD + ((owner.holeGap + extra + side + owner.padding) * 2.0f);
+            width = owner.holeD + ((owner.holeGap + extra + side) * 2.0f);
         } else {
-            width = (trailW > 0.0f ? owner.innerGap + trailW : 0.0f) + (owner.padding * 2.0f) + leadingWidth();
+            width = (trailW > 0.0f ? owner.innerGap + trailW : 0.0f) + owner.padding + leadingInset() + leadingWidth();
         }
         if (item.fullWidth) {
             width = widthCap();
@@ -161,9 +173,33 @@ public final class CompactContent extends Content {
         return barH() * dev.android.dynamicisland.island.graphics.BatteryBar.ASPECT;
     }
 
+    private boolean hasHeadlineTile() {
+        return owner.oneDesign() && !teams && (item.icon != null || launcherIcon != null) && !item.pulsingDot
+                && item.eventLayout != IslandItem.EventLayout.BATTERY && !owner.hasRecordingWaveform(item);
+    }
+
+    private float leadingHeight() {
+        return owner.leadSize * (hasHeadlineTile() ? 28f / 22f : 1f);
+    }
+
+    private float leadingSize() {
+        float height = leadingHeight();
+        if (!hasHeadlineTile() || (launcherIcon == null && !wideAlbum)) return height;
+        // Reserve the camera gap or trailing text space before making the image wider.
+        float room = owner.holeD > 0
+                ? (widthCap() - owner.holeD) / 2f - owner.holeGap - leadingInset()
+                : widthCap() - leadingInset() - owner.padding
+                    - (item.trailing == IslandItem.Trailing.NONE ? 0f : owner.innerGap + owner.dp(MIN_TRAILING_DP));
+        return Math.max(height, Math.min(height * WIDE_TILE_ASPECT, room));
+    }
+
+    private float leadingInset() {
+        return hasHeadlineTile() ? owner.leadSize * (2f / 22f) : owner.padding;
+    }
+
     private float leadingWidth() {
         if (wideBattery()) return leadingLabelW;
-        if (!owner.hasRecordingWaveform(item)) return owner.leadSize + (leadingLabel == null ? 0 : owner.innerGap + leadingLabelW);
+        if (!owner.hasRecordingWaveform(item)) return leadingSize() + (leadingLabel == null ? 0 : owner.innerGap + leadingLabelW);
         float available = owner.holeD > 0 ? (widthCap() - owner.holeD) / 2f - owner.holeGap - owner.padding
                 : widthCap() - owner.padding * 2f - owner.innerGap - owner.dp(MIN_TRAILING_DP);
         return Math.max(owner.leadSize, Math.min(owner.dp(42), available));
@@ -186,16 +222,33 @@ public final class CompactContent extends Content {
             owner.drawRecordingWaveform(c, item, shape.left + owner.padding, midY,
                     Math.max(1f, Math.min(leadingWidth(), room)), lead * .9f, alpha);
         } else {
-            if (!wideBattery()) owner.drawLeadingMono(c, item, shape.left + owner.padding, midY, lead, alpha);
+            float iconLeft = shape.left + leadingInset();
+            float drawnWidth = leadingSize();
+            if (hasHeadlineTile()) {
+                float tileHeight = Math.min(leadingHeight(), shape.height() * (28f / 32f));
+                float right = owner.holeD > 0 ? shape.centerX() - owner.holeD / 2f - owner.holeGap
+                        : shape.right - owner.padding - (trailW > 0 ? owner.innerGap + trailW : 0f);
+                drawnWidth = Math.min(drawnWidth * tileHeight / leadingHeight(), right - iconLeft);
+                if (drawnWidth > 0f) {
+                    tileHeight = Math.min(tileHeight, drawnWidth);
+                    if (launcherIcon != null || wideAlbum) {
+                        owner.drawHeadlineImage(c, item, launcherIcon, iconLeft, midY, drawnWidth, tileHeight, alpha);
+                    } else {
+                        owner.drawHeadlineIcon(c, item, iconLeft, midY, tileHeight, alpha);
+                    }
+                }
+            } else if (!wideBattery()) {
+                owner.drawLeadingMono(c, item, iconLeft, midY, lead, alpha);
+            }
             if (leadingLabel != null) {
-                float left = shape.left + owner.padding + (wideBattery() ? 0.0f : owner.leadSize + owner.innerGap);
+                float left = iconLeft + (wideBattery() ? 0.0f : Math.max(0f, drawnWidth) + owner.innerGap);
                 float limit = owner.holeD > 0 ? shape.centerX() - owner.holeD / 2 - owner.holeGap - holeClearance()
                         : shape.right - owner.padding - trailW - owner.innerGap;
                 int save = c.save();
                 c.clipRect(left, shape.top, Math.max(left, limit), shape.bottom);
                 owner.trailPaint.setColor(Colors.withAlpha(Colors.WHITE, alpha));
                 Paint.FontMetrics fm = metrics;
-            owner.trailPaint.getFontMetrics(fm);
+                owner.trailPaint.getFontMetrics(fm);
                 c.drawText(leadingLabel, left, midY - (fm.ascent + fm.descent) / 2, owner.trailPaint);
                 c.restoreToCount(save);
             }

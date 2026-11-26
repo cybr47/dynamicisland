@@ -8,6 +8,15 @@ The transition is based on the [reference in issue #11](https://github.com/sampp
 reviewed as 339 decoded frames. The reference is a roughly 24 fps recording, so its exact spring
 constants and display refresh timing cannot be recovered from the video.
 
+## Appearance
+
+**Appearance › Style** controls the island shape independently of the animation setting.
+
+- **Pill style** is the default. In iMotion it uses the capsule and circular secondary bubble described below.
+- **OneDesign** uses a squircle with curved handles for neighbouring activities in Classic and iMotion.
+  Swipe across the compact row to move through the queue, or hold the pill to hide it.
+  **App icon zoom** and **Wider album cover** appear while OneDesign is selected.
+
 ## Behavior
 
 - Tap the long capsule or the circular bubble to unfold that activity from its current position and size.

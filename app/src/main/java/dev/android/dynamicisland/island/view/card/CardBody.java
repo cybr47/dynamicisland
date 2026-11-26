@@ -1,6 +1,7 @@
 package dev.android.dynamicisland.island.view.card;
 
 import dev.android.dynamicisland.island.view.media.MediaFx;
+import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
@@ -28,19 +29,48 @@ public abstract class CardBody {
     private static final float PRESS_SHRINK = 0.14f;
     private static final float PRESS_HALO_ALPHA = 0.16f;
     private static final int MAX_TEXT_BUTTONS = 3;
+    private static final int HEADLINE_DAY_SURFACE = 0xFAFCFCFF;
+    private static final int HEADLINE_NIGHT_SURFACE = 0xFA3A3A3D;
 
     final List<Btn> buttons = new ArrayList<>();
     /** Total height of the body; set by the subclass constructor. */
     public float h;
     final IslandView owner;
+    private final boolean headlineStyle;
     public final IslandItem item;
     /** Width of the body. */
     public final float w;
 
     CardBody(IslandView owner, IslandItem item, float w) {
+        this(owner, item, w, false);
+    }
+
+    CardBody(IslandView owner, IslandItem item, float w, boolean headlineStyle) {
         this.owner = owner;
         this.item = item;
         this.w = w;
+        this.headlineStyle = headlineStyle;
+    }
+
+    /** ZZKN's day and night card surface colors. A custom frosted material keeps its own palette. */
+    public final int headlineSurfaceColor() {
+        if (!headlineStyle || ModuleSettings.frostedMaterial() || ModuleSettings.lowPerformance()) return 0;
+        return headlineNight() ? HEADLINE_NIGHT_SURFACE : HEADLINE_DAY_SURFACE;
+    }
+
+    public final int headlineRimColor() {
+        return headlineNight() ? 0x1AFFFFFF : 0xBFFFFFFF;
+    }
+
+    final int headlineTextColor() {
+        int surface = headlineSurfaceColor();
+        if (surface == 0) return Colors.WHITE;
+        return surface == HEADLINE_NIGHT_SURFACE ? 0xFFFCFCFF : 0xFF252528;
+    }
+
+    private boolean headlineNight() {
+        return (owner.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
     }
 
     /** Draws the body with its top-left corner at ({@code x}, {@code y}); {@code elapsed} is ms since it appeared. */
@@ -123,7 +153,8 @@ public abstract class CardBody {
             owner.fillPaint.setColor(Colors.withAlpha(b.bg, alpha));
             c.drawRoundRect(owner.tmpRect, owner.tmpRect.height() / 2.0f, owner.tmpRect.height() / 2.0f, owner.fillPaint);
             if (b.label != null) {
-                drawLabel(c, b.label, owner.tmpRect, alpha);
+                drawLabel(c, b.label, owner.tmpRect, alpha,
+                        b.bg == Colors.TRANSPARENT_MARK ? headlineTextColor() : Colors.WHITE);
             }
             return;
         }
@@ -144,12 +175,12 @@ public abstract class CardBody {
         if (b.icon != null) {
             owner.drawDrawable(c, b.icon, false, Colors.WHITE, owner.tmpRect.centerX() - (contentSize / 2.0f), owner.tmpRect.centerY() - (contentSize / 2.0f), contentSize, alpha, 0.0f);
         } else if (b.label != null) {
-            drawLabel(c, b.label, owner.tmpRect, alpha);
+            drawLabel(c, b.label, owner.tmpRect, alpha, Colors.WHITE);
         }
     }
 
-    private void drawLabel(Canvas c, String label, RectF bounds, float alpha) {
-        owner.buttonPaint.setColor(Colors.withAlpha(Colors.WHITE, alpha));
+    private void drawLabel(Canvas c, String label, RectF bounds, float alpha, int color) {
+        owner.buttonPaint.setColor(Colors.withAlpha(color, alpha));
         String text = TextUtils.ellipsize(label, owner.buttonPaint, bounds.width() - owner.dp(14.0f), TextUtils.TruncateAt.END).toString();
         Paint.FontMetrics fm = owner.buttonPaint.getFontMetrics();
         c.drawText(text, bounds.centerX(), bounds.centerY() - ((fm.ascent + fm.descent) / 2.0f), owner.buttonPaint);

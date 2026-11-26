@@ -7,7 +7,9 @@ import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
 import dev.android.dynamicisland.island.graphics.Colors;
@@ -35,6 +37,7 @@ final class IconPainter {
     private final RectF scratch;
     private final Path barClip;
     private final Path imageClip = new Path();
+    private final Path headlineIconPath = new Path();
 
     IconPainter(Metrics m, Paints paints, Waveform waveform, RecordingWaveform recordingWaveform, DigitClock clock, MediaFxCache mediaFx, RectF scratch, Path barClip) {
         this.m = m;
@@ -109,34 +112,140 @@ final class IconPainter {
         }
     }
 
+    /** Draws the colored icon tile used by Headline's compact bar and activity cards. */
+    void drawHeadlineIcon(Canvas canvas, IslandItem item, float left, float midY, float size, float alpha) {
+        float top = midY - size / 2f;
+        float glyph = size * (22f / 28f);
+        float inset = (size - glyph) / 2f;
+        if (item.icon == null || item.pulsingDot) {
+            drawLeadingMono(canvas, item, left + inset, midY, glyph, alpha);
+            return;
+        }
+        CompactShape.icon(headlineIconPath, left, top, size);
+        int save = alpha < .999f ? canvas.saveLayerAlpha(left, top, left + size, top + size,
+                Math.round(255f * clamp01(alpha))) : canvas.save();
+        try {
+            if (item.iconIsImage || item.icon instanceof android.graphics.drawable.BitmapDrawable && ModuleSettings.colorIcons()) {
+                canvas.clipPath(headlineIconPath);
+                if (item.isMedia && item.cardImage != null) {
+                    mediaFx.obtain(item).drawArt(canvas, left, top, size, 1f, 0f, IslandView.now());
+                } else {
+                    boolean gray = item.iconIsImage && !ModuleSettings.colorIcons();
+                    if (gray) item.icon.setColorFilter(GRAYSCALE);
+                    try { drawDrawable(canvas, item.icon, true, 0, left, top, size, 1f, 0f); }
+                    finally { if (gray) item.icon.setColorFilter(null); }
+                }
+                return;
+            }
+
+            int background = item.fillAccent();
+            if (item.customAccent == 0 && item.torchControls && item.torchOn) background = 0xFF166DF0;
+            if (item.customAccent == 0 && item.kind == IslandItem.Kind.TIMER) {
+                background = item.pillColor != 0 ? item.pillColor : 0xFF5E57D9;
+            }
+            int tint = Colors.WHITE;
+            if (background != -1 && background != 0 && background != Colors.BLACK) {
+                paints.fill.setColor(background);
+                canvas.drawPath(headlineIconPath, paints.fill);
+                if (android.graphics.Color.luminance(background) > .45f) tint = Colors.BLACK;
+            }
+            drawDrawable(canvas, item.icon, false, tint, left + inset, top + inset, glyph, 1f, 0f);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+    }
+
+    /** Lets a full-colour app icon or cover fill the compact tile while the image keeps its proportions. */
+    void drawHeadlineImage(Canvas c, IslandItem item, Drawable launcherIcon, float left, float midY,
+            float width, float height, float alpha) {
+        float top = midY - height / 2f;
+        scratch.set(left, top, left + width, top + height);
+        if (width > height) CompactShape.path(headlineIconPath, scratch);
+        else CompactShape.icon(headlineIconPath, left, top, height);
+        int save = alpha < .999f ? c.saveLayerAlpha(left, top, left + width, top + height,
+                Math.round(255f * clamp01(alpha))) : c.save();
+        try {
+            c.clipPath(headlineIconPath);
+            if (launcherIcon == null) {
+                mediaFx.obtain(item).drawArt(c, left, top, width, height, 1f, 0f, IslandView.now());
+            } else if (launcherIcon instanceof AdaptiveIconDrawable adaptive) {
+                // Keep the adaptive background covering Headline's tile while zooming the logo over it.
+                float zoom = ModuleSettings.appIconZoom() / 100f;
+                float size = width * (1f + 2f * AdaptiveIconDrawable.getExtraInsetFraction());
+                float midX = left + width / 2f;
+                drawAdaptiveLayer(c, adaptive.getBackground(), midX, midY, size);
+                drawAdaptiveLayer(c, adaptive.getForeground(), midX, midY, size * zoom);
+            } else {
+                float zoom = ModuleSettings.appIconZoom() / 100f;
+                if (zoom < 1f) {
+                    paints.fill.setColor(Colors.CARD_SOLID);
+                    c.drawPath(headlineIconPath, paints.fill);
+                }
+                launcherIcon.setAlpha(255);
+                drawCroppedImage(c, launcherIcon, Math.round(left), Math.round(top),
+                        Math.round(width), Math.round(height), 0f, zoom);
+            }
+        } finally {
+            c.restoreToCount(save);
+        }
+    }
+
+    private static void drawAdaptiveLayer(Canvas c, Drawable layer, float midX, float midY, float size) {
+        if (layer == null) return;
+        int left = Math.round(midX - size / 2f), top = Math.round(midY - size / 2f);
+        int pixels = Math.round(size);
+        Rect before = layer.getBounds();
+        int oldLeft = before.left, oldTop = before.top, oldRight = before.right, oldBottom = before.bottom;
+        layer.setBounds(left, top, left + pixels, top + pixels);
+        try {
+            layer.draw(c);
+        } finally {
+            layer.setBounds(oldLeft, oldTop, oldRight, oldBottom);
+        }
+    }
+
     /** Draws in a square slot: artwork is centre-cropped; tinted icons fit inside without stretching. */
     void drawDrawable(Canvas c, Drawable d, boolean image, int tint, float left, float top, float size, float alpha, float corner) {
+        drawDrawable(c, d, image, tint, left, top, size, size, alpha, corner);
+    }
+
+    void drawDrawable(Canvas c, Drawable d, boolean image, int tint, float left, float top, float width,
+            float height, float alpha, float corner) {
         int l = Math.round(left);
         int t = Math.round(top);
-        int sz = Math.round(size);
+        int w = Math.round(width);
+        int h = Math.round(height);
         // VectorDrawable records its shared renderer into a hardware display list. Mutating its
         // alpha for a second representation can also fade the first one (e.g. pill and bubble).
         // Keep the drawable opaque and composite each occurrence's opacity on the canvas instead.
         d.setAlpha(255);
-        int opacity = alpha < .999f ? c.saveLayerAlpha(l, t, l + sz, t + sz,
+        int opacity = alpha < .999f ? c.saveLayerAlpha(l, t, l + w, t + h,
                 Math.round(255.0f * clamp01(alpha))) : c.save();
         try {
             if (!image) {
-                fitInside(d, l, t, sz);
+                fitInside(d, l, t, w);
                 d.setTint(tint);
                 d.draw(c);
                 return;
             }
-            int save = c.save();
-            scratch.set(l, t, l + sz, t + sz);
+            drawCroppedImage(c, d, l, t, w, h, corner, 1f);
+        } finally { c.restoreToCount(opacity); }
+    }
+
+    private void drawCroppedImage(Canvas c, Drawable d, int left, int top, int width, int height, float corner,
+            float zoom) {
+        int save = c.save();
+        try {
+            scratch.set(left, top, left + width, top + height);
             imageClip.rewind();
             imageClip.addRoundRect(scratch, corner, corner, Path.Direction.CW);
             c.clipPath(imageClip);
-            fillSlot(d, l, t, sz);
+            fillSlot(d, left, top, width, height, zoom);
             d.setTintList(null);
             d.draw(c);
+        } finally {
             c.restoreToCount(save);
-        } finally { c.restoreToCount(opacity); }
+        }
     }
 
     /** Fits a symbol inside its slot, preserving its intrinsic aspect ratio and centring both axes. */
@@ -156,21 +265,21 @@ final class IconPainter {
     }
 
     /**
-     * Sets bounds that fit {@code d} into the square {@code sz} at ({@code l}, {@code t}) like ImageView's
-     * CENTER_CROP, so non 1:1 artwork keeps its aspect ratio (the caller clips the overflow).
+     * Start with the centre-cropped bounds, then scale the source about the slot's centre.
      */
-    private static void fillSlot(Drawable d, int l, int t, int sz) {
+    private static void fillSlot(Drawable d, int l, int t, int width, int height, float zoom) {
         int iw = d.getIntrinsicWidth();
         int ih = d.getIntrinsicHeight();
-        if (iw <= 0 || ih <= 0 || iw == ih) {
-            d.setBounds(l, t, l + sz, t + sz);
-            return;
+        float drawnWidth = width, drawnHeight = height;
+        if (iw > 0 && ih > 0) {
+            float scale = Math.max(width / (float) iw, height / (float) ih);
+            drawnWidth = iw * scale;
+            drawnHeight = ih * scale;
         }
-        float scale = Math.max(sz / (float) iw, sz / (float) ih);
-        int dw = Math.round(iw * scale);
-        int dh = Math.round(ih * scale);
-        int dl = l + ((sz - dw) / 2);
-        int dt = t + ((sz - dh) / 2);
+        int dw = Math.round(drawnWidth * zoom);
+        int dh = Math.round(drawnHeight * zoom);
+        int dl = l + ((width - dw) / 2);
+        int dt = t + ((height - dh) / 2);
         d.setBounds(dl, dt, dl + dw, dt + dh);
     }
 

@@ -18,16 +18,19 @@ import android.net.Uri;
 import android.provider.Settings;
 import android.app.LocaleManager;
 import android.view.View;
+import android.view.Gravity;
 import android.view.Window;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import dev.android.dynamicisland.R;
 import dev.android.dynamicisland.island.rules.RuleDictionary;
 import dev.android.dynamicisland.xposed.Diagnostics;
+import java.text.NumberFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -410,6 +413,15 @@ public final class SettingsActivity extends Activity {
     private void displayPage() {
         subPage(getString(R.string.ui_appearance));
         showPreview();
+        int style = ModuleSettings.readIslandStyle(prefs);
+        ui.radioGroup(page, getString(R.string.island_style), null,
+                new CharSequence[]{getString(R.string.style_pill), getString(R.string.style_one_design)},
+                null, style, selected -> {
+                    if (selected == style) return;
+                    prefs.edit().putInt(ModuleSettings.KEY_ISLAND_STYLE, selected).apply();
+                    refresh();
+                    if (preview != null) preview.showMusicPill();
+                });
         radios(R.string.anim_title, R.string.desc_animation, new int[]{R.string.anim_new, R.string.anim_legacy, R.string.imode_title},
                 new int[]{OneUi.TAG_DEFAULT, 0, OneUi.TAG_RECOMMENDED},
                 flag(ModuleSettings.KEY_I_MODE, false) ? 2 : flag(ModuleSettings.KEY_LEGACY_ANIMATION, false) ? 1 : 0, LivePreview.RING,
@@ -439,11 +451,19 @@ public final class SettingsActivity extends Activity {
         radios(R.string.torch_style, R.string.desc_torch, new int[]{R.string.torch_style_classic, R.string.torch_style_beam},
                 new int[]{OneUi.TAG_DEFAULT, OneUi.TAG_RECOMMENDED},
                 prefs.getInt(ModuleSettings.KEY_TORCH_STYLE, 0) == 1 ? 1 : 0, LivePreview.TORCH,
-                style -> prefs.edit().putInt(ModuleSettings.KEY_TORCH_STYLE, style).apply());
+                selected -> prefs.edit().putInt(ModuleSettings.KEY_TORCH_STYLE, selected).apply());
         ui.note(page, getString(R.string.torch_style_desc));
         LinearLayout look = ui.card(page);
         previewToggle(look, R.string.setting_card_header, R.string.setting_card_header_desc, ModuleSettings.KEY_CARD_HEADER, true);
         previewToggle(look, R.string.setting_color_icons, R.string.setting_color_icons_desc, ModuleSettings.KEY_COLOR_ICONS, false);
+        if (style == ModuleSettings.STYLE_ONE_DESIGN) {
+            addAppIconZoom(look);
+            ui.switchRow(look, getString(R.string.wider_album_cover), getString(R.string.wider_album_cover_desc),
+                    flag(ModuleSettings.KEY_WIDER_ALBUM_COVER, false), on -> {
+                        prefs.edit().putBoolean(ModuleSettings.KEY_WIDER_ALBUM_COVER, on).apply();
+                        if (preview != null) preview.showMusicPill();
+                    });
+        }
         ui.switchRow(look, getString(R.string.ui_show_battery_icon), getString(R.string.ui_show_battery_icon_summary),
                 !flag(ModuleSettings.KEY_HIDE_BATTERY_ICON, true), on -> {
                     prefs.edit().putBoolean(ModuleSettings.KEY_HIDE_BATTERY_ICON, !on).apply();
@@ -454,6 +474,59 @@ public final class SettingsActivity extends Activity {
         ui.linkRow(more, getString(R.string.glow_title), getString(R.string.glow_summary),
                 () -> open(() -> new AmbientGlowScreen(this, ui, prefs).open()));
         ui.linkRow(more, getString(R.string.pos_title), getString(R.string.pos_sum), () -> open(position::open));
+    }
+
+    private void addAppIconZoom(LinearLayout group) {
+        String title = getString(R.string.app_icon_zoom);
+        int initial = ModuleSettings.readAppIconZoom(prefs);
+        NumberFormat percent = NumberFormat.getPercentInstance(getResources().getConfiguration().getLocales().get(0));
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setTag(title);
+        box.setPadding(ui.dp(22), ui.dp(14), ui.dp(22), ui.dp(8));
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(ui.text(title, 17, ui.textColor), new LinearLayout.LayoutParams(0, -2, 1));
+        TextView value = ui.text(percent.format(initial / 100d), 15, ui.accent);
+        row.addView(value);
+        box.addView(row);
+        SeekBar slider = new SeekBar(this);
+        slider.setMin(ModuleSettings.APP_ICON_ZOOM_MIN);
+        slider.setMax(ModuleSettings.APP_ICON_ZOOM_MAX);
+        slider.setProgress(initial);
+        slider.setContentDescription(title);
+        slider.setStateDescription(value.getText());
+        slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            private boolean tracking;
+
+            @Override public void onStartTrackingTouch(SeekBar bar) {
+                tracking = true;
+                if (preview != null) preview.showAppIconPill();
+            }
+
+            @Override public void onProgressChanged(SeekBar bar, int amount, boolean fromUser) {
+                value.setText(percent.format(amount / 100d));
+                bar.setStateDescription(value.getText());
+                if (!fromUser) return;
+                if (tracking) {
+                    if (preview != null) preview.previewAppIconZoom(amount);
+                } else {
+                    save(amount);
+                    if (preview != null) preview.showAppIconPill();
+                }
+            }
+
+            @Override public void onStopTrackingTouch(SeekBar bar) {
+                tracking = false;
+                save(bar.getProgress());
+            }
+
+            private void save(int amount) {
+                prefs.edit().putInt(ModuleSettings.KEY_APP_ICON_ZOOM, amount).apply();
+            }
+        });
+        box.addView(slider, new LinearLayout.LayoutParams(-1, ui.dp(48)));
+        group.addView(box);
     }
 
     /** A switch whose result the preview shows right away. */

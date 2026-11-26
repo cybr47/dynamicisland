@@ -261,6 +261,7 @@ public final class ProgressSource {
         }
         it.trailing = IslandItem.Trailing.PROGRESS_RING;
         Drawable appIcon = apps.icon(pkg);
+        it.appIcon = appIcon;
         it.icon = appIcon;
         it.iconIsImage = true;
         it.cardImage = appIcon;

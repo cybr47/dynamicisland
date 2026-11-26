@@ -37,16 +37,22 @@ public class IModeTest {
         final List<IslandItem> items=new ArrayList<>();
         final List<String> closed=new ArrayList<>();
         final List<String> shadePulls=new ArrayList<>();
+        int minimized;
         Fixture(int count) {
+            this(count,true);
+        }
+        Fixture(int count,boolean iMotion) {
             ShadowChoreographer.setFrameDelay(Duration.ofMillis(16));
             ShadowChoreographer.setPaused(true);
-            prefs.edit().clear().putBoolean(ModuleSettings.KEY_I_MODE,true)
+            prefs.edit().clear().putBoolean(ModuleSettings.KEY_I_MODE,iMotion)
+                    .putInt(ModuleSettings.KEY_ISLAND_STYLE, ModuleSettings.STYLE_ONE_DESIGN)
                     .putBoolean(ModuleSettings.KEY_AMBIENT_GLOW,false).commit();
             ModuleSettings.configurePreview(prefs);
             IslandHost host=(IslandHost)java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
                     new Class<?>[]{IslandHost.class},(proxy,method,args)->switch(method.getName()) {
                         case "onPeekClosed" -> { closed.add((String)args[0]); yield null; }
                         case "onShadeDragStart" -> { shadePulls.add("start"); yield null; }
+                        case "onMinimize" -> { minimized++; yield null; }
                         case "hasMinimized", "onShadeFade" -> false;
                         default -> null;
                     });
@@ -155,16 +161,213 @@ public class IModeTest {
         }
     }
 
-    @Test public void bubbleTapUnfoldsFromItsOwnSurfaceAndRearrangesTheOtherActivities() {
+    @Test public void handlesPageBetweenActivitiesWithoutOpeningACard() {
         try(Fixture f=new Fixture(3)) {
-            RectF bubble=new RectF();f.scene.iMode.bubbleBounds(bubble);
-            f.tap(bubble);f.assertSingle("item1");
-            RectF start=f.bounds(f.active());
-            assertEquals(bubble.centerX(),start.centerX(),.01f);assertEquals(bubble.width(),start.width(),.01f);
-            assertEquals(bubble.centerY(),start.centerY(),.01f);assertEquals(bubble.height(),start.height(),.01f);
-            f.step(16,20);
-            assertTrue(f.bounds(f.active()).width()>400);
-            assertEquals(List.of("item0","item2"),f.scene.iMode.visibleItems().stream().map(i->i.key).toList());
+            Shapes shapes=ReflectionHelpers.getField(f.view,"shapes");
+            RectF main=new RectF(),handle=new RectF();
+            shapes.paintedMain(main);shapes.handle(main,1,handle);
+            f.tap(handle);f.step(16,70);
+            assertMain(f,"item1");
+            assertEquals(Mode.COMPACT,f.scene.mode);
+            shapes.paintedMain(main);shapes.handle(main,-1,handle);
+            f.tap(handle);f.step(16,70);
+            assertMain(f,"item0");
+            assertEquals(Mode.COMPACT,f.scene.mode);
+        }
+    }
+
+    @Test public void compactQueuesKeepArrivalOrderAndOnlyShowHandlesForAvailableDirections() {
+        for(boolean iMotion:new boolean[]{false,true}) try(Fixture f=new Fixture(0,iMotion)) {
+            IslandItem music=item("music",2),torch=item("torch",1),timer=item("timer",0);
+            show(f,List.of(music));
+            assertRow(f,music.key,false,false);
+            show(f,List.of(torch,music));
+            assertRow(f,music.key,false,true);
+            swipeCompact(f,1);
+            assertRow(f,torch.key,true,false);
+            swipeCompact(f,1);
+            assertRow(f,torch.key,true,false);
+            swipeCompact(f,-1);
+            assertRow(f,music.key,false,true);
+            swipeCompact(f,-1);
+            assertRow(f,music.key,false,true);
+
+            show(f,List.of(timer,torch,music));
+            assertRow(f,music.key,false,true);
+            swipeCompact(f,1);
+            assertRow(f,torch.key,true,true);
+            show(f,List.of(music,timer,torch));
+            assertRow(f,torch.key,true,true);
+            swipeCompact(f,1);
+            assertRow(f,timer.key,true,false);
+            swipeCompact(f,-1);
+            assertRow(f,torch.key,true,true);
+
+            show(f,List.of(music,timer));
+            assertRow(f,timer.key,true,false);
+            show(f,List.of(torch,music,timer));
+            assertRow(f,timer.key,true,true);
+            swipeCompact(f,1);
+            assertRow(f,torch.key,true,false);
+
+            RectF main=new RectF();
+            f.view.computeMain(main);
+            f.tap(main);
+            assertEquals("the centered activity opens its controls",torch.key,f.active().item.key);
+        }
+    }
+
+    @Test public void theFarHandleAppearsDuringTheExchangeOnlyIfAnotherActivityRemains() {
+        for(boolean iMotion:new boolean[]{false,true}) for(int count:new int[]{2,3}) try(Fixture f=new Fixture(count,iMotion)) {
+            RectF main=new RectF();
+            f.view.computeMain(main);
+            f.event(MotionEvent.ACTION_DOWN,main.centerX(),main.centerY());
+            f.event(MotionEvent.ACTION_MOVE,main.centerX()-main.width()*.86f,main.centerY());
+            HeadlinePage page=iMotion ? ReflectionHelpers.getField(f.scene.iMode,"compactPage") : f.scene.classicPage;
+            assertNotNull(page);
+            assertTrue("the upcoming activity is already expanding",page.fraction()>.7f);
+            assertEquals("there was no previous activity at first",0f,page.outerHandle(-1),.001f);
+            assertEquals("only a third activity calls for a new right handle",count==3,page.outerHandle(1)>.1f);
+            f.event(MotionEvent.ACTION_CANCEL,main.centerX()-main.width()*.86f,main.centerY());
+            f.step(16,70);
+            assertRow(f,"item0",false,true);
+        }
+    }
+
+    private static void show(Fixture f,List<IslandItem> items) {
+        f.view.setItems(items);
+        f.step(16,80);
+    }
+
+    private static void swipeCompact(Fixture f,int direction) {
+        RectF main=new RectF();
+        f.view.computeMain(main);
+        float x=main.centerX(),y=main.centerY(),end=x-50*direction;
+        f.event(MotionEvent.ACTION_DOWN,x,y);
+        f.event(MotionEvent.ACTION_MOVE,end,y);
+        f.event(MotionEvent.ACTION_UP,end,y);
+        f.step(16,80);
+    }
+
+    private static void assertRow(Fixture f,String key,boolean left,boolean right) {
+        assertEquals(key,f.scene.queue.current().key);
+        if(f.scene.iMode!=null) assertMain(f,key);
+        else assertEquals(key,f.scene.primary.key);
+        Shapes shapes=ReflectionHelpers.getField(f.view,"shapes");
+        RectF main=new RectF(),handle=new RectF();
+        shapes.paintedMain(main);
+        Region touchable=new Region();
+        f.view.getTouchRegion(touchable);
+        Bitmap row=Bitmap.createBitmap(440,70,Bitmap.Config.ARGB_8888);
+        f.view.draw(new Canvas(row));
+        for(int side:new int[]{-1,1}) {
+            shapes.handle(main,side,handle);
+            boolean exists=side<0 ? left : right;
+            String label=key+" handle "+side;
+            if(exists) {
+                assertEquals(label,5f,handle.width(),.05f);
+                assertEquals(22f,handle.height(),.05f);
+                int x=(int)(handle.left+handle.width()*(side<0 ? .3f : .7f)),y=(int)handle.centerY();
+                assertTrue(label,touchable.contains(x,y));
+                assertTrue(label,Color.alpha(row.getPixel(x,y))>220);
+            } else {
+                assertTrue(label,handle.isEmpty());
+                int x=Math.round(side<0 ? main.left-6 : main.right+6),y=(int)main.centerY();
+                assertFalse(label,touchable.contains(x,y));
+                assertEquals(label,0,Color.alpha(row.getPixel(x,y)));
+            }
+        }
+        row.recycle();
+    }
+
+    @Test public void styleSwitchRebuildsTheCompactRowInBothAnimationModes() {
+        for (boolean iMotion : new boolean[]{false, true}) {
+            try (Fixture f = new Fixture(2, iMotion)) {
+                Shapes shapes = ReflectionHelpers.getField(f.view, "shapes");
+                RectF main = new RectF();
+                RectF secondary = new RectF();
+                f.view.setPillSize(20, 64, 0);
+
+                f.prefs.edit().putInt(ModuleSettings.KEY_ISLAND_STYLE, ModuleSettings.STYLE_PILL).commit();
+                ModuleSettings.configurePreview(f.prefs);
+                f.view.setItems(f.items);
+                Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofMillis(250));
+                f.step(16, 80);
+                shapes.paintedMain(main);
+                shapes.handle(main, 1, secondary);
+                assertFalse(f.view.oneDesign());
+                assertEquals(36f, main.height(), .5f);
+                assertEquals(36f, secondary.width(), .5f);
+                assertEquals(secondary.width(), secondary.height(), .5f);
+                assertEquals(iMotion, f.scene.iMode != null);
+                assertEquals(Mode.COMPACT, f.scene.mode);
+
+                f.prefs.edit().putInt(ModuleSettings.KEY_ISLAND_STYLE, ModuleSettings.STYLE_ONE_DESIGN).commit();
+                ModuleSettings.configurePreview(f.prefs);
+                f.view.setItems(f.items);
+                f.step(16, 80);
+                assertTrue(f.view.oneDesign());
+                shapes.paintedMain(main);
+                shapes.handle(main, 1, secondary);
+                assertEquals(38.4f, main.height(), .5f);
+                assertTrue(secondary.width() < secondary.height());
+                assertFalse(secondary.isEmpty());
+                assertEquals(iMotion, f.scene.iMode != null);
+            }
+        }
+    }
+
+    @Test public void classicPagingUsesBothDirectionsAndNeverMinimizesAnActivity() {
+        try(Fixture f=new Fixture(3,false)) {
+            Shapes shapes=ReflectionHelpers.getField(f.view,"shapes");
+            RectF main=new RectF();
+            for(int direction:new int[]{1,-1}) {
+                shapes.paintedMain(main);
+                float x=main.centerX(),y=main.centerY();
+                f.event(MotionEvent.ACTION_DOWN,x,y);
+                f.event(MotionEvent.ACTION_MOVE,x-50*direction,y);
+                RectF dragged=new RectF();shapes.paintedMain(dragged);
+                assertTrue("the page follows the drag before release",(dragged.centerX()-x)*direction<-3);
+                f.event(MotionEvent.ACTION_UP,x-50*direction,y);
+                f.step(16,70);
+                assertEquals(direction>0 ? "item1" : "item0",f.scene.primary.key);
+            }
+            shapes.paintedMain(main);
+            f.event(MotionEvent.ACTION_DOWN,main.centerX(),main.centerY());
+            f.event(MotionEvent.ACTION_MOVE,main.centerX()-50,main.centerY());
+            f.event(MotionEvent.ACTION_CANCEL,main.centerX()-50,main.centerY());
+            f.step(16,70);
+            assertEquals(0,f.minimized);
+            assertEquals(Mode.COMPACT,f.scene.mode);
+            assertEquals("item0",f.scene.primary.key);
+            assertEquals(3,f.scene.items.size());
+        }
+    }
+
+    @Test public void classicLongPressHidesTheRowUntilPulledDownAtTheCamera() {
+        try(Fixture f=new Fixture(2,false)) {
+            f.prefs.edit().putBoolean(ModuleSettings.KEY_ALWAYS_VISIBLE,true).commit();
+            ModuleSettings.configurePreview(f.prefs);
+            f.event(MotionEvent.ACTION_DOWN,220,30);
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(
+                    ViewConfiguration.getLongPressTimeout()+50,java.util.concurrent.TimeUnit.MILLISECONDS);
+            f.event(MotionEvent.ACTION_UP,220,30);
+            List<IslandItem> updated=new ArrayList<>(f.items);
+            updated.add(item("new",2));f.view.setItems(updated);f.step(16,90);
+            assertTrue(f.scene.hiddenByGesture());
+            assertTrue(f.view.isFullyHidden());
+            assertFalse(f.view.canPeek());
+            assertEquals(3,f.scene.items.size());
+            Region region=new Region();f.view.getTouchRegion(region);
+            assertTrue(region.contains(220,30));
+            assertFalse(region.contains(150,30));
+            f.event(MotionEvent.ACTION_DOWN,220,30);
+            f.event(MotionEvent.ACTION_MOVE,220,53);
+            f.event(MotionEvent.ACTION_UP,220,53);
+            f.step(16,80);
+            assertFalse(f.scene.hiddenByGesture());
+            assertEquals(Mode.COMPACT,f.scene.mode);
+            assertEquals(0,f.minimized);
         }
     }
 
@@ -321,13 +524,14 @@ public class IModeTest {
             f.step(16,70);f.scene.iMode.mainBounds(released);
             assertEquals("system cancellation keeps the current item","item1",f.scene.iMode.hit(released.centerX(),released.centerY(),0));
             Set<String> reachable=new HashSet<>();
+            f.scene.iMode.next(-1);f.step(16,70);
             for(int i=0;i<8;i++) {
                 f.scene.iMode.mainBounds(released);
                 reachable.add(f.scene.iMode.hit(released.centerX(),released.centerY(),0));
                 f.scene.iMode.next(1);f.step(16,70);
             }
             assertEquals(8,reachable.size());assertSame("display paging does not change notification priority",f.items.get(0),f.scene.primary);
-            f.scene.iMode.dragCompact(-55);f.scene.iMode.finishCompactPage(-1000);f.step(16,3);
+            f.scene.iMode.dragCompact(55);f.scene.iMode.finishCompactPage(1000);f.step(16,3);
             f.scene.iMode.finishCompactInteraction();f.scene.iMode.mainBounds(released);
             f.scene.iMode.open(f.scene.iMode.hit(released.centerX(),released.centerY(),0),true);
             assertEquals(Mode.EXPANDED,f.scene.mode);assertRectClose(released,f.bounds(f.active()));
@@ -342,8 +546,8 @@ public class IModeTest {
     @Test public void newAndDepartingCapsulesGrowAndShrinkInPlaceAndCanReverseWithoutSnapping() {
         try(Fixture f=new Fixture(1)) {
             IslandItem extra=item("arrival",1);f.items.add(extra);f.view.setItems(f.items);
-            RectF first=new RectF(),grown=new RectF();f.scene.iMode.bubbleBounds(first);
-            f.step(16,6);f.scene.iMode.bubbleBounds(grown);
+            RectF first=new RectF(),grown=new RectF();f.scene.iMode.handleBounds(1,first);
+            f.step(16,6);f.scene.iMode.handleBounds(1,grown);
             assertTrue("a new surface grows rather than appearing at full size",grown.height()>first.height()+3);
             f.step(16,70);
             Map<String,IMode.Node> nodes=ReflectionHelpers.getField(f.scene.iMode,"nodes");
@@ -472,22 +676,22 @@ public class IModeTest {
         }
     }
 
-    @Test public void quickPanelCollectsTheSecondaryPillAtTheCameraHoleBeforeItFades() {
+    @Test public void quickPanelCollectsTheSecondaryHandleAtTheCameraHoleBeforeItFades() {
         try(Fixture f=new Fixture(2)) {
-            Shapes shapes=ReflectionHelpers.getField(f.view,"shapes");RectF main=new RectF(),bubble=new RectF();
-            f.view.computeMain(main);shapes.bubble(main,bubble);float originalDistance=bubble.centerX()-220;
+            Shapes shapes=ReflectionHelpers.getField(f.view,"shapes");RectF main=new RectF(),handle=new RectF();
+            f.view.computeMain(main);shapes.handle(main,1,handle);float originalDistance=handle.centerX()-220;
             f.view.setShadeFraction(1);float last=originalDistance;boolean gathered=false;
             for(int i=0;i<45;i++) {
-                f.step(8,1);f.view.computeMain(main);shapes.bubble(main,bubble);
-                float distance=Math.abs(bubble.centerX()-220);
+                f.step(8,1);f.view.computeMain(main);shapes.handle(main,1,handle);
+                float distance=Math.abs(handle.centerX()-220);
                 assertTrue("the secondary surface travels inward rather than becoming a stationary dot",distance<=last+.01f);
-                assertEquals("the small pill stays circular",bubble.width(),bubble.height(),.01f);
+                assertTrue("the handle keeps its narrow proportions",handle.width()<handle.height()*.4f);
                 if(f.scene.shadeAlpha()>.1f && distance<originalDistance*.35f) gathered=true;
                 last=distance;
             }
             assertTrue("gathering is visible before the opacity gate closes",gathered);
-            f.view.setShadeFraction(0);f.step(16,80);f.view.computeMain(main);shapes.bubble(main,bubble);
-            assertEquals(originalDistance,bubble.centerX()-220,.1f);
+            f.view.setShadeFraction(0);f.step(16,80);f.view.computeMain(main);shapes.handle(main,1,handle);
+            assertEquals(originalDistance,handle.centerX()-220,.1f);
         }
     }
 
@@ -502,8 +706,8 @@ public class IModeTest {
             f.event(MotionEvent.ACTION_UP,card.centerX()-140,card.centerY());f.scene.iMode.mainBounds(after);
             assertRectClose(before,after);f.assertSingle("item1");
             if(count==2) {
-                RectF bubble=new RectF();f.scene.iMode.bubbleBounds(bubble);
-                assertTrue("one remaining activity does not invent a third bubble",bubble.isEmpty());
+                RectF handle=new RectF();f.scene.iMode.handleBounds(1,handle);
+                assertTrue("one remaining activity has no handle",handle.isEmpty());
             }
             boolean transferred=false;
             for(int i=0;i<160;i++) {
@@ -1010,12 +1214,12 @@ public class IModeTest {
             RectF main=new RectF();f.scene.iMode.mainBounds(main);
             float x=main.centerX(),y=main.centerY();
             f.event(MotionEvent.ACTION_DOWN,x,y);
-            f.event(MotionEvent.ACTION_MOVE,x+24,y+2);   // the first move is mostly sideways: the pill starts to page
+            f.event(MotionEvent.ACTION_MOVE,x-24,y+2);   // the first move is mostly sideways: the pill starts to page
             assertTrue("the pill began to page",f.scene.iMode.hasCompactDrag());
-            f.event(MotionEvent.ACTION_MOVE,x+30,y+48);  // then the finger goes clearly down
+            f.event(MotionEvent.ACTION_MOVE,x-30,y+48);  // then the finger goes clearly down
             assertEquals("the pull is handed to the shade",1,f.shadePulls.size());
             assertFalse(f.scene.iMode.hasCompactDrag());
-            f.event(MotionEvent.ACTION_UP,x+30,y+120);
+            f.event(MotionEvent.ACTION_UP,x-30,y+120);
             f.step(16,60);
             assertEquals(Mode.COMPACT,f.scene.mode);
         }
@@ -1071,12 +1275,9 @@ public class IModeTest {
             f.scene.iMode.next(1);f.step(16,80);
             IslandItem system=item("event:toggle:dnd",0);
             system.kind=IslandItem.Kind.EVENT;system.transientPopup=true;
-            List<IslandItem> items=new ArrayList<>(f.items);items.add(0,system);
-            f.view.setItems(items);f.step(16,40);
-            assertMain(f,system.key);
-
             // A high-priority arrival during an unfinished swipe used to be ignored forever.
             assertTrue(f.scene.iMode.dragCompact(-30));
+            List<IslandItem> items=new ArrayList<>(f.items);items.add(0,system);
             IslandItem charging=item("event:charging",0);
             charging.kind=IslandItem.Kind.EVENT;charging.transientPopup=true;charging.fullWidth=true;
             items.add(0,charging);f.view.setItems(items);f.step(16,40);
@@ -1106,7 +1307,7 @@ public class IModeTest {
 
     @Test public void aPullDownOnASubPillOpensThatActivity() {
         try(Fixture f=new Fixture(3)) {
-            RectF sub=new RectF();f.scene.iMode.bubbleBounds(sub);
+            RectF sub=new RectF();f.scene.iMode.handleBounds(1,sub);
             assertTrue("there is a sub pill",sub.width()>0);
             String key=f.scene.iMode.hit(sub.centerX(),sub.centerY(),0);
             assertTrue("the sub pill is a different activity than the first",key!=null);
@@ -1127,11 +1328,11 @@ public class IModeTest {
             RectF main=new RectF();f.scene.iMode.mainBounds(main);
             float x=main.centerX(),y=main.centerY();
             f.event(MotionEvent.ACTION_DOWN,x,y);
-            f.event(MotionEvent.ACTION_MOVE,x+24,y+2);
+            f.event(MotionEvent.ACTION_MOVE,x-24,y+2);
             assertTrue(f.scene.iMode.hasCompactDrag());
-            f.event(MotionEvent.ACTION_MOVE,x+30,y+48);
+            f.event(MotionEvent.ACTION_MOVE,x-30,y+48);
             assertFalse("the half-made page swipe is dropped",f.scene.iMode.hasCompactDrag());
-            f.event(MotionEvent.ACTION_UP,x+30,y+120);
+            f.event(MotionEvent.ACTION_UP,x-30,y+120);
             f.step(16,80);
             assertEquals(0,f.shadePulls.size());
             assertEquals(Mode.EXPANDED,f.scene.mode);
@@ -1143,11 +1344,11 @@ public class IModeTest {
             RectF main=new RectF();f.scene.iMode.mainBounds(main);
             float x=main.centerX(),y=main.centerY();
             f.event(MotionEvent.ACTION_DOWN,x,y);
-            f.event(MotionEvent.ACTION_MOVE,x+24,y+2);
-            f.event(MotionEvent.ACTION_MOVE,x+70,y+30);
+            f.event(MotionEvent.ACTION_MOVE,x-24,y+2);
+            f.event(MotionEvent.ACTION_MOVE,x-70,y+30);
             assertTrue(f.scene.iMode.hasCompactDrag());
             assertEquals(0,f.shadePulls.size());
-            f.event(MotionEvent.ACTION_UP,x+70,y+30);
+            f.event(MotionEvent.ACTION_UP,x-70,y+30);
         }
     }
 

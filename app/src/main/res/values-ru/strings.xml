@@ -8,6 +8,12 @@
     <string name="setting_shade_media">Музыкальный плеер в шторке</string>
     <string name="setting_shade_media_desc">Показывать музыкальную карточку острова в шторке.</string>
     <string name="setting_color_icons_desc">Сохранять цвета приложений и команд в свёрнутом острове.</string>
+    <string name="island_style">Стиль</string>
+    <string name="style_pill">Стиль «Капсула»</string>
+    <string name="style_one_design">OneDesign</string>
+    <string name="wider_album_cover">Широкая обложка альбома</string>
+    <string name="wider_album_cover_desc">Показывать широкий фрагмент обложки в свёрнутом музыкальном острове.</string>
+    <string name="app_icon_zoom">Масштаб значка приложения</string>
     <string name="setting_visualizer">Звуковая волна</string>
     <string name="setting_visualizer_desc">Двигать волну по реальному звуку. Если выключено, используется плавная анимация.</string>
     <string name="setting_paused_timeout">Хранить приостановленную музыку</string>

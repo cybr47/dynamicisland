@@ -14,6 +14,12 @@
     <string name="setting_shade_media">Music player in the shade</string>
     <string name="setting_shade_media_desc">Show the island music card in the notification panel.</string>
     <string name="setting_color_icons_desc">Keep app and team icon colours in the compact island.</string>
+    <string name="island_style">Style</string>
+    <string name="style_pill">Pill style</string>
+    <string name="style_one_design">OneDesign</string>
+    <string name="wider_album_cover">Wider album cover</string>
+    <string name="wider_album_cover_desc">Show a wider crop of the album cover in the compact music island.</string>
+    <string name="app_icon_zoom">App icon zoom</string>
     <string name="setting_visualizer">Audio waveform</string>
     <string name="setting_visualizer_desc">Drive the music waveform from the real audio output. Off uses a gentle animation instead.</string>
     <string name="setting_paused_timeout">Keep paused music for</string>
@@ -690,8 +696,8 @@
     <string name="recommend_search">Find settings using related terms or Korean initials.</string>
     <string name="recommend_glass">Try experimental frosted cards that softly blend the backdrop and album colours.</string>
     <string name="recommend_motion_title">A new way to move: iMotion</string>
-    <string name="recommend_gesture_title">Swipe to hide, pull to restore</string>
-    <string name="recommend_gesture">In iMotion, swipe up to hide the island. Pull down near the camera hole to show it again.</string>
+    <string name="recommend_gesture_title">Hold to hide, pull to restore</string>
+    <string name="recommend_gesture">Hold the compact island to hide it. Pull down near the camera hole to show it again.</string>
     <string name="recommend_torch_title">Drag the light to adjust your flashlight</string>
     <string name="recommend_search_title">Search without the exact name</string>
     <string name="recommend_glass_title">Try a new material · Experimental</string>

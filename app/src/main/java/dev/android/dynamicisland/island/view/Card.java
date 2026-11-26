@@ -37,6 +37,8 @@ public final class Card {
     float leaveFromW;
     /** Where the card started when the cards are pulled open by the finger (the pill's size), see {@link Director#beginPullOpen}. */
     float pullFromCy, pullFromW, pullFromH;
+    /** Width of the compact surface this card opened from. */
+    float compactWidth;
     float targetCy;
     float targetH;
     float targetW;

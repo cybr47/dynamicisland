@@ -1,5 +1,8 @@
 package dev.android.dynamicisland.island.view;
 
+import android.graphics.Path;
+import android.graphics.RectF;
+
 /**
  * Sizes of the island in pixels plus where the camera hole sits. The dimensions derive from the display
  * density once; the hole geometry and the limits that depend on the screen are refreshed by
@@ -8,11 +11,15 @@ package dev.android.dynamicisland.island.view;
 final class Metrics {
     /** Gap in dp between a window's content and its bottom edge. */
     private static final float WINDOW_MARGIN_DP = 40.0f;
+    private static final float HEADLINE_HEIGHT_DP = 32f;
+    private static final float HEADLINE_GLYPH_DP = 22f;
 
     private final float density;
+    private float heightScale = 1f;
 
+    boolean oneDesign;
     float pillH;
-    final float padding;
+    float padding;
     final float holeGap;
     final float innerGap;
     float leadSize;
@@ -22,8 +29,8 @@ final class Metrics {
     float ringSize;
     final float waveBarW;
     final float waveGap;
-    final float outlineW;
-    final float cardRadius;
+    float outlineW;
+    float cardRadius;
     final float cardGap;
 
     float cardMargin;
@@ -38,23 +45,45 @@ final class Metrics {
     boolean tablet;
 
     Metrics(float density) {
+        this(density, false);
+    }
+
+    Metrics(float density, boolean oneDesign) {
         this.density = density;
-        pillH = dp(30.0f);
-        padding = dp(9.0f);
+        setStyle(oneDesign);
+        bubbleGap = dp(6f);
         holeGap = dp(6.0f);
         innerGap = dp(8.0f);
-        leadSize = dp(20.0f);
-        bubbleR = dp(15.0f);
-        bubbleGap = dp(6.0f);
         minPillW = dp(64.0f);
         ringSize = dp(17.0f);
         waveBarW = dp(3.8f);
         waveGap = dp(2.6f);
-        outlineW = Math.max(1.5f, dp(0.7f));
-        cardRadius = dp(28.0f);
         cardGap = dp(8.0f);
         cardMargin = dp(12.0f);
         cardMaxW = dp(420.0f);
+    }
+
+    void setStyle(boolean oneDesign) {
+        this.oneDesign = oneDesign;
+        applyHeight();
+        padding = dp(oneDesign ? 8f : 9f);
+        outlineW = oneDesign ? dp(.8f) : Math.max(1.5f, dp(.7f));
+        cardRadius = dp(oneDesign ? 36f : 28f);
+    }
+
+    private void applyHeight() {
+        pillH = dp(oneDesign ? HEADLINE_HEIGHT_DP : 30f) * heightScale;
+        leadSize = dp(oneDesign ? HEADLINE_GLYPH_DP : 20f) * heightScale;
+        bubbleR = dp(15f) * heightScale;
+        ringSize = dp(17f) * heightScale;
+    }
+
+    void compactPath(Path out, RectF bounds) {
+        CompactShape.path(out, bounds, bounds.height() / 2f, oneDesign ? 1f : 0f);
+    }
+
+    int outlineColor() {
+        return oneDesign ? dev.android.dynamicisland.island.graphics.Colors.PILL_OUTLINE : 0x47FFFFFF;
     }
 
     /**
@@ -63,7 +92,7 @@ final class Metrics {
      */
     boolean applySize(int heightPercent, int minWidthDp, int maxWidthDp) {
         float scale = 1.0f + (heightPercent / 100.0f);
-        float newH = dp(30.0f) * scale;
+        float newH = dp(oneDesign ? HEADLINE_HEIGHT_DP : 30f) * scale;
         float newMin = Math.min(Math.max(dp(64.0f), dp(minWidthDp)), Math.max(dp(64.0f), screenW * 0.96f));
         float newMax = maxWidthDp > 0 ? dp(maxWidthDp) : 0.0f;
         if (newMax > 0.0f) {
@@ -72,10 +101,8 @@ final class Metrics {
         if (Math.abs(pillH - newH) < 0.5f && Math.abs(minPillW - newMin) < 0.5f && Math.abs(userMaxW - newMax) < 0.5f) {
             return false;
         }
-        pillH = newH;
-        leadSize = dp(20.0f) * scale;
-        ringSize = dp(17.0f) * scale;
-        bubbleR = dp(15.0f) * scale;
+        heightScale = scale;
+        applyHeight();
         minPillW = newMin;
         userMaxW = newMax;
         recomputeMaxWidth();

@@ -115,9 +115,10 @@ public class GlowMotionTest {
         return bitmap;
     }
 
-    @Test public void allCompactBodiesShareTheRealSessionAndFadeOutWithoutAColourJump() {
+    @Test public void compactGlowFollowsTheRealSessionAndFadesOutWithoutAColourJump() {
         android.app.Activity activity=org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup().get();
         SharedPreferences prefs=activity.getSharedPreferences("shared-glow",0);
+        prefs.edit().putInt(ModuleSettings.KEY_ISLAND_STYLE, ModuleSettings.STYLE_ONE_DESIGN).commit();
         ModuleSettings.configurePreview(prefs);
         IslandView view=new IslandView(activity,IslandHost.NONE);
         activity.setContentView(view);view.setGeometry(600,300,55,20,false);view.layout(0,0,600,150);
@@ -126,21 +127,18 @@ public class GlowMotionTest {
         first.title="Timer";second.title="Flashlight";
         view.setGlowSession(null);view.setItems(java.util.List.of(first,second));frames(view,180);
         Shapes shapes=ReflectionHelpers.getField(view,"shapes");Scene scene=ReflectionHelpers.getField(view,"scene");
-        RectF body=new RectF(),bubble=new RectF();shapes.paintedMain(body);shapes.bubble(body,scene.springs.split.value(),bubble);
-        assertTrue(scene.springs.split.value()>.9f);
+        RectF body=new RectF();shapes.paintedMain(body);
+        assertTrue(scene.springs.rightHandle.value()>.9f);
         assertEquals(0,haloLight(capture(view),body));
         IslandItem music=music();music.accent=0xFF2288EE;music.mediaPalette=ArtworkPalette.solid(music.accent);
         view.setGlowSession(music);frames(view,180);
-        assertTrue(view.needsAudio()); // music is not itself either visible pill
+        assertTrue(view.needsAudio()); // the glow follows music even when a timer is in the pill
         Bitmap playing=capture(view);
-        for(RectF shape:new RectF[]{body,bubble}){
-            int sample=playing.getPixel(Math.round(shape.centerX()),Math.round(shape.top)-4);
-            assertTrue(Color.alpha(sample)>0);assertTrue(Color.blue(sample)>Color.red(sample)*2);
-        }
+        int sample=playing.getPixel(Math.round(body.centerX()),Math.round(body.top)-4);
+        assertTrue(Color.alpha(sample)>0);assertTrue(Color.blue(sample)>Color.red(sample)*2);
         music.playing=false;frames(view,300);assertFalse(view.needsAudio());
         Bitmap paused=capture(view);
         assertTrue(haloLight(paused,body)<haloLight(playing,body)*.1);
-        assertTrue(haloLight(paused,bubble)<haloLight(playing,bubble)*.1);
         view.setGlowSession(null);frames(view,1);
         long initial=haloLight(capture(view),body);assertTrue(initial>0);
         frames(view,30);

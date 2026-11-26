@@ -2,7 +2,7 @@ package dev.android.dynamicisland.island.view;
 
 import dev.android.dynamicisland.island.graphics.Spring;
 
-/** The springs that animate the pill, the bubble and the card stack as a whole (cards own their own). */
+/** The springs that animate the pill, its handles and the card stack as a whole. */
 final class Springs {
     final Spring width = new Spring(0.0f, 0.4f, 0.8f).setValueThreshold(0.4f);
     final Spring height = new Spring(0.0f, 0.4f, 0.8f).setValueThreshold(0.4f);
@@ -14,8 +14,9 @@ final class Springs {
     /** Small bounce added to the pill's scale. */
     final Spring pulse = new Spring(0.0f, 0.3f, 0.55f).setValueThreshold(5.0E-4f);
     final Spring offsetX = new Spring(0.0f, 0.35f, 0.7f).setValueThreshold(0.3f);
-    /** 0 = bubble merged into the pill, 1 = fully split off. */
     final Spring split = new Spring(0.0f, 0.42f, 0.62f).setValueThreshold(0.002f);
+    final Spring leftHandle = new Spring(0.0f, 0.42f, 0.62f).setValueThreshold(0.002f);
+    final Spring rightHandle = new Spring(0.0f, 0.42f, 0.62f).setValueThreshold(0.002f);
     /** Opacity of the pill's own black while cards pour out of it. */
     final Spring pillBlob = new Spring(1.0f, 0.2f, 1.0f).setValueThreshold(0.002f);
     /** Opacity of the pill's light outline: hidden while cards are out, so no seam shows where they join the pill. */
@@ -29,7 +30,12 @@ final class Springs {
      */
     final Spring shadeGate = new Spring(1.0f, 0.3f, 0.9f).setValueThreshold(0.002f);
 
-    private final Spring[] all = {width, height, visibility, suppress, press, pulse, offsetX, split, pillBlob, stackDx, stackDy, outlineFade, shadeGate};
+    private final Spring[] all = {width, height, visibility, suppress, press, pulse, offsetX, split, leftHandle, rightHandle,
+            pillBlob, stackDx, stackDy, outlineFade, shadeGate};
+
+    Spring handle(int side) {
+        return side < 0 ? leftHandle : rightHandle;
+    }
 
     boolean animating() {
         for (Spring s : all) if (!s.isAtRest()) return true;

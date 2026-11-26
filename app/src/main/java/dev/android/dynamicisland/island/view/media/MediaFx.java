@@ -354,8 +354,12 @@ public final class MediaFx {
      * the vertical axis and is replaced halfway by the new one, each with its blurred ghost fading in and out.
      */
     public void drawArt(Canvas c, float left, float top, float size, float alpha, float corner, long now) {
+        drawArt(c, left, top, size, size, alpha, corner, now);
+    }
+
+    public void drawArt(Canvas c, float left, float top, float width, float height, float alpha, float corner, long now) {
         if (ModuleSettings.stillMusicEffects()) {
-            if (artCur != null) owner.drawDrawable(c, artCur, true, 0, left, top, size, alpha, corner);
+            if (artCur != null) owner.drawArtwork(c, artCur, left, top, width, height, alpha, corner);
             return;
         }
 
@@ -369,8 +373,8 @@ public final class MediaFx {
             // the second half starts mirrored and rotates into place
             float rotation = firstHalf ? angle : angle - 180.0f;
             float ghostAlpha = Math.min(1.0f, ((float) Math.sin(IslandView.clamp01(t) * 3.141592653589793d)) * 1.3f);
-            float pivotX = left + (size / 2.0f);
-            float pivotY = top + (size / 2.0f);
+            float pivotX = left + (width / 2.0f);
+            float pivotY = top + (height / 2.0f);
             owner.flipCamera.save();
             owner.flipCamera.rotateY(-rotation);
             owner.flipCamera.getMatrix(owner.flipMatrix);
@@ -380,10 +384,10 @@ public final class MediaFx {
             int save = c.save();
             c.concat(owner.flipMatrix);
             if (art != null) {
-                owner.drawDrawable(c, art, true, 0, left, top, size, alpha, corner);
+                owner.drawArtwork(c, art, left, top, width, height, alpha, corner);
             }
             if (ghost != null && ghostAlpha > 0.01f) {
-                owner.drawDrawable(c, ghost, true, 0, left, top, size, alpha * ghostAlpha, corner);
+                owner.drawArtwork(c, ghost, left, top, width, height, alpha * ghostAlpha, corner);
             }
             c.restoreToCount(save);
             return;
@@ -391,7 +395,7 @@ public final class MediaFx {
         artPrev = null;
         blurPrev = null;
         if (artCur != null) {
-            owner.drawDrawable(c, artCur, true, 0, left, top, size, alpha, corner);
+            owner.drawArtwork(c, artCur, left, top, width, height, alpha, corner);
         }
     }
 }

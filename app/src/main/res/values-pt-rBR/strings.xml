@@ -8,6 +8,12 @@
     <string name="setting_shade_media">Reprodutor de música na aba</string>
     <string name="setting_shade_media_desc">Exibir o card de música da ilha no painel de notificações.</string>
     <string name="setting_color_icons_desc">Manter as cores dos ícones de aplicativos e equipes na ilha compacta.</string>
+    <string name="island_style">Estilo</string>
+    <string name="style_pill">Estilo pílula</string>
+    <string name="style_one_design">OneDesign</string>
+    <string name="wider_album_cover">Capa de álbum mais larga</string>
+    <string name="wider_album_cover_desc">Mostra um recorte mais largo da capa na ilha de música compacta.</string>
+    <string name="app_icon_zoom">Zoom do ícone do app</string>
     <string name="setting_visualizer">Forma de onda de áudio</string>
     <string name="setting_visualizer_desc">Movimentar a forma de onda de música a partir da saída de áudio real. Desativado usa uma animação suave.</string>
     <string name="setting_paused_timeout">Manter música pausada por</string>

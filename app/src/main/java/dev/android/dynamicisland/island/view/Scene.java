@@ -6,17 +6,20 @@ import dev.android.dynamicisland.settings.ModuleSettings;
 import java.util.ArrayList;
 import java.util.List;
 
-/** What the island currently shows: the mode, the items, the layers inside pill and bubble and the open cards. */
+/** What the island currently shows: the mode, the items, the compact layers and the open cards. */
 final class Scene {
     /** Shade pull above which the shade counts as "pulled" at all. */
     static final float SHADE_PULLED_EPS = 0.001f;
 
     final Springs springs;
+    final ActivityQueue queue = new ActivityQueue();
     final PillOutlinePolicy pillOutline = new PillOutlinePolicy();
     Mode mode = Mode.HIDDEN;
     ContentHandoff contentHandoff;
     /** Optional, independent single-activity presentation. */
     IMode iMode;
+    Director.ClassicPage classicPage;
+    boolean classicHiddenByGesture;
     /** Shown items, most important first. */
     final List<IslandItem> items = new ArrayList<>();
     /** Minimized items that still show up (behind the live ones) when the stack is opened. */
@@ -65,13 +68,24 @@ final class Scene {
 
     int pillBodyColor(Layer layer) {
         if (layer == null || mode != Mode.COMPACT) return 0xFF000000;
-        IslandItem item = layer.content.item;
+        return pillBodyColor(layer.content.item);
+    }
+
+    static int pillBodyColor(IslandItem item) {
         return !item.hasTeams() || item.pillColor == 0 ? 0xFF000000 : item.pillColor;
+    }
+
+    boolean hiddenByGesture() {
+        return iMode != null ? iMode.hiddenByGesture() : classicHiddenByGesture;
+    }
+
+    IslandItem compactNeighbor(int side) {
+        return primary == null ? null : queue.neighbor(primary.key, side);
     }
 
     /** Nothing to show, yet the user asked for an empty pill around the camera (not while they hid the island by hand). */
     boolean restingShown() {
-        return mode == Mode.HIDDEN && ModuleSettings.alwaysVisible() && !(iMode != null && iMode.hiddenByGesture());
+        return mode == Mode.HIDDEN && ModuleSettings.alwaysVisible() && !hiddenByGesture();
     }
 
     float pillOutlineOpacity() {
@@ -79,8 +93,9 @@ final class Scene {
     }
 
     float pillOutlineTarget() {
-        boolean bubble = springs.split.value() > 0.003f;
-        return pillOutline.visible(ModuleSettings.pillOutlineMode(), pillBodyColor(mainIn), pillBodyColor(bubbleIn), bubble) ? 1f : 0f;
+        boolean handles = springs.leftHandle.value() > 0.003f || springs.rightHandle.value() > 0.003f;
+        return pillOutline.visible(ModuleSettings.pillOutlineMode(), pillBodyColor(mainIn), pillBodyColor(bubbleIn),
+                handles || springs.split.value() > .003f) ? 1f : 0f;
     }
 
     /** The shade is down far enough that the island has been sent away (it comes back only when the shade is nearly shut). */
@@ -119,8 +134,10 @@ final class Scene {
     /** The items an opened stack shows: the live ones, then the newest minimized ones, at most {@code max}. */
     List<IslandItem> stackItems(int max) {
         List<IslandItem> out = new ArrayList<>();
+        if (iMode == null && primary != null && max > 0) out.add(primary);
         for (int i = 0; i < items.size() && out.size() < max; i++) {
-            out.add(items.get(i));
+            IslandItem item = items.get(i);
+            if (iMode != null || primary == null || !item.key.equals(primary.key)) out.add(item);
         }
         for (int j = minimized.size() - 1; j >= 0 && out.size() < max; j--) {
             out.add(minimized.get(j));

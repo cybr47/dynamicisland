@@ -35,7 +35,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * The Dynamic Island itself: one custom view that draws the pill, the secondary bubble and the expanded
+ * The Dynamic Island itself: one custom view that draws the pill, its side handles and the expanded
  * card stack (with the metaball "goo" between them) and handles all touch gestures on them.
  *
  * <p>Created by the island controller and hosted in a window over the status bar; the host
@@ -127,13 +127,13 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
     public float seekFraction;
 
     // layout values the content classes read; copies of the final ones in Metrics
-    float bubbleR;
     final float holeGap;
     float holeTextPadding;
     final float innerGap;
     float leadSize;
     float minPillW;
-    final float padding;
+    float padding;
+    float bubbleR;
     float holeD;
     private float markerX = -1.0f;
     private float markerY;
@@ -169,7 +169,7 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
     private final ShadeCards shadeCards;
     private final RectF pillRect = new RectF();
     private final RectF samplingPill = new RectF();
-    private final RectF samplingBubble = new RectF();
+    private final RectF samplingHandle = new RectF();
     private final int[] samplingLocation = new int[2];
     private final int[] materialLocation = new int[2];
     private Runnable pillSamplingStateChanged;
@@ -200,8 +200,9 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
     public IslandView(Context context, IslandHost host) {
         super(context);
         this.host = host != null ? host : IslandHost.NONE;
-        metrics = new Metrics(context.getResources().getDisplayMetrics().density);
+        metrics = new Metrics(context.getResources().getDisplayMetrics().density, ModuleSettings.oneDesign());
         paints = new Paints(context.getResources().getDisplayMetrics(), metrics.outlineW);
+        paints.setStyle(metrics.oneDesign);
         trailPaint = paints.trail;
         smallPaint = paints.small;
         titlePaint = paints.title;
@@ -209,12 +210,9 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
         bigTimePaint = paints.bigTime;
         buttonPaint = paints.button;
         fillPaint = paints.fill;
-        bubbleR = metrics.bubbleR;
         holeGap = metrics.holeGap;
         innerGap = metrics.innerGap;
-        leadSize = metrics.leadSize;
-        minPillW = metrics.minPillW;
-        padding = metrics.padding;
+        copyMetrics();
 
         shapes = new Shapes(metrics, scene);
         mediaFx = new MediaFxCache(this);
@@ -230,13 +228,27 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
         pillPainter = new PillPainter(metrics, paints, scene, shapes, stackPainter, bridge);
         director = new Director(this, this.host, metrics, scene, shapes, bodies, mediaFx);
         touch = new TouchController(this, this.host, metrics, scene, shapes, director, buttons);
-        ticker = new SecondTicker(this, scene, stackPainter);
+        ticker = new SecondTicker(this, scene, stackPainter, director);
         footprint = new Footprint(this, this.host, metrics, scene, shapes);
         shadeCards = new ShadeCards(this, stackPainter);
         setWillNotDraw(false);
     }
 
     // ---- wiring used by the helper classes -----------------------------------------------------------------------
+
+    boolean oneDesign() {
+        return metrics.oneDesign;
+    }
+
+    void applyStyle(boolean oneDesign) {
+        metrics.setStyle(oneDesign);
+        paints.setStyle(oneDesign);
+        copyMetrics();
+    }
+
+    void resetPresentationTouch() {
+        touch.resetPresentation();
+    }
 
     BodyFactory bodies() {
         return bodies;
@@ -265,7 +277,7 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
     /** Keep direct manipulation and structural transitions responsive; ambient motion uses the smaller budget. */
     boolean interactiveMotion() {
         long t = now();
-        if (scene.iMode != null && scene.iMode.animating()) return true;
+        if (scene.iMode != null && scene.iMode.animating() || scene.classicPage != null) return true;
         if (t < touchActiveUntil || springs.animating() || buttons.animating() || seekBody != null || sliderBody != null
                 || scene.mainOut != null || scene.bubbleOut != null
                 || scene.contentHandoff != null && !scene.contentHandoff.finished(t)) return true;
@@ -342,10 +354,14 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
         if (samplingPill.width() < 2f || samplingPill.height() < 2f) return false;
         float left = samplingPill.left;
         float right = samplingPill.right;
-        if (!iMotion && springs.split.value() > 0.003f) {
-            shapes.bubble(samplingPill, samplingBubble);
-            left = Math.min(left, samplingBubble.left);
-            right = Math.max(right, samplingBubble.right);
+        if (!iMotion && !metrics.oneDesign && springs.split.value() > .003f) {
+            shapes.bubble(samplingPill, springs.split.value(), samplingHandle);
+            right = Math.max(right, samplingHandle.right);
+        } else if (!iMotion && metrics.oneDesign) {
+            shapes.handle(samplingPill, -1, samplingHandle);
+            if (!samplingHandle.isEmpty()) left = samplingHandle.left;
+            shapes.handle(samplingPill, 1, samplingHandle);
+            if (!samplingHandle.isEmpty()) right = samplingHandle.right;
         }
         getLocationOnScreen(samplingLocation);
         float band = Math.max(1f, Math.min(metrics.dp(3f), samplingPill.height() * 0.12f));
@@ -419,6 +435,7 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
                 && y>=metrics.cy-metrics.pillH/2-dp(4) && y<=metrics.cy+metrics.pillH/2+dp(4);
         if(scene.iMode.hit(x,y,dp(4))!=null) return true;
         RectF bounds=new RectF();
+        if(scene.mode==Mode.COMPACT && shapes.handleAt(x,y,dp(4),bounds)!=0) return true;
         for(Card card:scene.cards) if(card.iMode) {
             shapes.card(card,bounds);
             if(bounds.contains(x,y) && (card.leaving || Math.abs(card.w.value()-card.body.w)>dp(3)
@@ -457,22 +474,24 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
         afterMetricsChanged();
     }
 
-    private void afterMetricsChanged() {
+    private void copyMetrics() {
+        padding = metrics.padding;
+        bubbleR = metrics.bubbleR;
         holeD = metrics.holeD;
         maxPillW = metrics.maxPillW;
         fullPillW = metrics.fullPillW();
         // the size the user set reaches the content classes through these copies
         minPillW = metrics.minPillW;
         leadSize = metrics.leadSize;
-        bubbleR = metrics.bubbleR;
+    }
+
+    private void afterMetricsChanged() {
+        copyMetrics();
         if (scene.mode == Mode.COMPACT && scene.primary != null) {
             director.refreshMain();
             scheduleFrame();
         } else if (scene.mode == Mode.EXPANDED) {
             collapse();
-        }
-        if (scene.secondary != null) {
-            director.refreshBubble();
         }
         invalidate();
         notifyHost();
@@ -684,7 +703,7 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
     /** Incoming cards may replace a manual card, but never a reply or a pulled-down shade. */
     public boolean canPeek() {
         return metrics.screenW > 0 && !isSuppressedNow() && !scene.held && !scene.shadePulled()
-                && !(scene.iMode!=null && scene.iMode.hiddenByGesture());
+                && !scene.hiddenByGesture();
     }
 
     public boolean isShowingCard(IslandItem item) {
@@ -804,7 +823,14 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
         }
         if (scene.mode == Mode.COMPACT) {
             if (scene.mainIn != null && capturesRecording(scene.mainIn.content.item)) return scene.mainIn.content.item.key;
-            if (scene.bubbleIn != null && springs.split.value() > .05f && capturesRecording(scene.bubbleIn.content.item)) return scene.bubbleIn.content.item.key;
+            if (!metrics.oneDesign) {
+                return scene.secondary != null && springs.split.value() > .05f && capturesRecording(scene.secondary)
+                        ? scene.secondary.key : null;
+            }
+            for (int side = -1; side <= 1; side += 2) {
+                IslandItem neighbor = scene.compactNeighbor(side);
+                if (neighbor != null && capturesRecording(neighbor)) return neighbor.key;
+            }
         }
         return null;
     }
@@ -984,7 +1010,6 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
             return false;
         }
         Layer main = scene.mainIn;
-        Layer bubble = scene.bubbleIn;
         boolean need = false;
         if(scene.iMode!=null) {
             List<IslandItem> shown=scene.iMode.visibleItems();
@@ -1005,11 +1030,10 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
             need |= runningStopwatch(main.content.item) || (main.content.item.isMedia && mediaFx.animating(main.content.item))
                     || iconPlaying(main.content.item);
         }
-        need |= clock.rolling();
-        if (bubble != null) {
-            IslandItem it = bubble.content.item;
-            need |= it.pulsingDot || runningStopwatch(it) || (it.isMedia && mediaFx.animating(it)) || iconPlaying(it);
+        if (scene.bubbleIn != null) {
+            need |= iconPlaying(scene.bubbleIn.content.item);
         }
+        need |= clock.rolling();
         if (sliderSettleKey != null) {
             need |= now() - sliderSettleStart < SliderBody.SETTLE_MS;
         }
@@ -1198,12 +1222,26 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
         icons.drawLeadingMono(c, item, left, midY, size, alpha);
     }
 
+    public void drawHeadlineIcon(Canvas canvas, IslandItem item, float left, float midY, float size, float alpha) {
+        icons.drawHeadlineIcon(canvas, item, left, midY, size, alpha);
+    }
+
+    void drawHeadlineImage(Canvas canvas, IslandItem item, Drawable launcherIcon, float left, float midY,
+            float width, float height, float alpha) {
+        icons.drawHeadlineImage(canvas, item, launcherIcon, left, midY, width, height, alpha);
+    }
+
     public void drawLeading(Canvas c, IslandItem item, float left, float midY, float size, float alpha) {
         icons.drawLeading(c, item, left, midY, size, alpha);
     }
 
     public void drawDrawable(Canvas c, Drawable d, boolean image, int tint, float left, float top, float size, float alpha, float corner) {
         icons.drawDrawable(c, d, image, tint, left, top, size, alpha, corner);
+    }
+
+    public void drawArtwork(Canvas c, Drawable art, float left, float top, float width, float height,
+            float alpha, float corner) {
+        icons.drawDrawable(c, art, true, 0, left, top, width, height, alpha, corner);
     }
 
     public float trailingWidth(IslandItem item, String text) {

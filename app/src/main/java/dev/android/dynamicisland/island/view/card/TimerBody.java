@@ -2,8 +2,11 @@ package dev.android.dynamicisland.island.view.card;
 
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.text.TextPaint;
 import android.text.TextUtils;
+import android.util.TypedValue;
 import dev.android.dynamicisland.island.graphics.Colors;
+import dev.android.dynamicisland.island.graphics.Fonts;
 import dev.android.dynamicisland.island.graphics.Glyphs;
 import dev.android.dynamicisland.island.graphics.GlyphIcon;
 import dev.android.dynamicisland.island.model.IslandItem;
@@ -32,26 +35,57 @@ public final class TimerBody extends CardBody {
     private static final float APP_ICON_CORNER = 0.26f;
 
     final boolean call;
+    private final boolean headline;
+    private final TextPaint clockPaint;
     final float iconSize;
     final String label;
     final float pad;
     final boolean stacked;
     final float stackedMiddle;
     public TimerBody(IslandView owner, IslandItem item, float w) {
-        super(owner, item, w);
-        pad = owner.dp(18.0f);
+        this(owner, item, w, false);
+    }
+
+    public TimerBody(IslandView owner, IslandItem item, float w, boolean headline) {
+        super(owner, item, w, headline);
+        this.headline = headline;
+        pad = owner.dp(headline ? 14f : 18f);
         call = item.kind == IslandItem.Kind.CALL;
-        iconSize = owner.dp(call ? 40.0f : 30.0f);
+        iconSize = owner.dp(headline ? 44f : call ? 40f : 30f);
+        clockPaint = headline ? new TextPaint(owner.bigTimePaint) : owner.bigTimePaint;
+        if (headline) {
+            clockPaint.setTypeface(Fonts.of(400));
+            clockPaint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 26f,
+                    owner.getResources().getDisplayMetrics()));
+        }
         h = owner.dp(84.0f);
         CharSequence labelText = item.title != null ? item.title : item.appName;
+        if (headline && !TextUtils.isEmpty(item.subtitle)) labelText = item.subtitle;
         label = labelText == null || labelText.toString().equals(owner.trailingString(item)) ? null : labelText.toString();
-        Paint.FontMetrics clockMetrics = owner.bigTimePaint.getFontMetrics();
+        Paint.FontMetrics clockMetrics = clockPaint.getFontMetrics();
         float textBlock = clockMetrics.descent - clockMetrics.ascent + (label == null ? 0 : owner.smallPaint.getTextSize() + owner.dp(4));
         h = Math.max(h, textBlock + pad * 2);
+        int count = Math.min(item.actions.size(), MAX_BUTTONS);
+        if (headline && hasLabels(item, count)) {
+            float headerHeight = Math.max(owner.dp(72), Math.max(iconSize, textBlock) + pad * 2);
+            stacked = true;
+            stackedMiddle = headerHeight / 2f;
+            float rowHeight = owner.dp(28);
+            h = count == 0 ? headerHeight : headerHeight + rowHeight + owner.dp(8);
+            float actionWidth = Math.max(0, (w - pad * 2) / Math.max(1, count));
+            for (int i = 0; i < count; i++) {
+                Btn button = new Btn();
+                button.action = item.actions.get(i);
+                button.label = button.action.title.toString();
+                button.bg = Colors.TRANSPARENT_MARK;
+                button.r.set(pad + i * actionWidth, headerHeight, pad + (i + 1) * actionWidth, headerHeight + rowHeight);
+                buttons.add(button);
+            }
+            return;
+        }
         float circleSize = owner.dp(46.0f);
         float gap = owner.dp(10.0f);
         float right = w - pad;
-        int count = Math.min(item.actions.size(), MAX_BUTTONS);
         boolean usedAccent = false;
         // laid out right to left, so the first action ends up leftmost
         for (int i = count - 1; i >= 0; i--) {
@@ -100,7 +134,7 @@ public final class TimerBody extends CardBody {
         float clockRoom = buttons.isEmpty() ? w - pad * 2 - iconSize - owner.dp(14)
                 : buttons.get(buttons.size() - 1).r.left - owner.dp(8) - pad - iconSize - owner.dp(14);
         String clock = owner.trailingString(item);
-        float natural = clock == null ? owner.dp(80) : owner.bigTimePaint.measureText(clock);
+        float natural = clock == null ? owner.dp(80) : clockPaint.measureText(clock);
         stacked = !call && !buttons.isEmpty() && clockRoom < Math.min(natural + owner.dp(8), owner.dp(132));
         stackedMiddle = headerHeight / 2;
         if (stacked) {
@@ -118,6 +152,13 @@ public final class TimerBody extends CardBody {
         }
     }
 
+    private static boolean hasLabels(IslandItem item, int count) {
+        for (int i = 0; i < count; i++) {
+            if (TextUtils.isEmpty(item.actions.get(i).title)) return false;
+        }
+        return true;
+    }
+
     @Override
     public void draw(Canvas c, float x, float y, float alpha, long elapsed) {
         float rowAlpha = rowAlpha(elapsed, 0);
@@ -129,6 +170,8 @@ public final class TimerBody extends CardBody {
             // a caller's photo is round; an app's own icon keeps the shape its icon pack gave it
             owner.drawDrawable(c, item.cardImage, true, 0, iconX, midY - (iconSize / 2.0f), iconSize, a,
                     item.cardImageRound ? iconSize / 2.0f : iconSize * APP_ICON_CORNER);
+        } else if (headline) {
+            owner.drawHeadlineIcon(c, item, iconX, midY, iconSize, a);
         } else {
             owner.drawLeading(c, item, iconX, midY, iconSize, a);
         }
@@ -154,27 +197,37 @@ public final class TimerBody extends CardBody {
             drawCallLines(c, a, midY, textX, textRight, time);
         }
         drawButtons(c, x, y + dy, a);
+        if (headline) {
+            owner.fillPaint.setColor(Colors.withAlpha(headlineTextColor(), a * .22f));
+            for (int i = 1; i < buttons.size(); i++) {
+                Btn button = buttons.get(i);
+                if (button.bg != Colors.TRANSPARENT_MARK) break;
+                float center = y + dy + button.r.centerY();
+                c.drawRect(x + button.r.left, center - owner.dp(8),
+                        x + button.r.left + owner.dp(1), center + owner.dp(8), owner.fillPaint);
+            }
+        }
     }
 
     /** Big time on top, small label under it; a lone label is centred on the row. */
     private void drawTimeAndLabel(Canvas c, float a, float midY, float textX, float textRight, String time) {
-        Paint.FontMetrics timeMetrics = owner.bigTimePaint.getFontMetrics();
+        Paint.FontMetrics timeMetrics = clockPaint.getFontMetrics();
         float timeHeight = timeMetrics.descent - timeMetrics.ascent;
         float labelHeight = label != null ? owner.smallPaint.getTextSize() + owner.dp(4.0f) : 0.0f;
         float blockTop = midY - ((timeHeight + labelHeight) / 2.0f);
         if (time != null) {
-            owner.bigTimePaint.setColor(Colors.withAlpha(Colors.WHITE, a));
+            clockPaint.setColor(Colors.withAlpha(headlineTextColor(), a));
             float room = Math.max(1, textRight - textX);
-            float natural = Math.max(1, owner.bigTimePaint.measureText(time));
+            float natural = Math.max(1, clockPaint.measureText(time));
             float scale = Math.min(1, room / natural);
             float baseline = blockTop - timeMetrics.ascent;
             int save = c.save();
             c.scale(scale, scale, textX, baseline);
-            owner.drawTime(c, item.key + "#card", time, owner.bigTimePaint, textX, baseline, item.chronoCountDown);
+            owner.drawTime(c, item.key + "#card", time, clockPaint, textX, baseline, item.chronoCountDown);
             c.restoreToCount(save);
         }
         if (label != null) {
-            owner.smallPaint.setColor(Colors.withAlpha(Colors.TEXT_SECONDARY, a));
+            owner.smallPaint.setColor(Colors.withAlpha(headlineTextColor(), a * .6f));
             String shownLabel = TextUtils.ellipsize(label, owner.smallPaint, textRight - textX, TextUtils.TruncateAt.END).toString();
             float baseline;
             if (time != null) {

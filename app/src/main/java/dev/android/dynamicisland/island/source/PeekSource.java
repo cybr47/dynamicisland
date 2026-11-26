@@ -264,6 +264,7 @@ public final class PeekSource {
         it.contentIntent = n.contentIntent;
         it.postTime = sbn.getPostTime();
         it.accent = n.color != 0 ? Colors.readableOnBlack(n.color) : -1;
+        it.appIcon = appIcon;
         it.cardImage = avatar != null ? avatar : appIcon;
         it.cardImageIsImage = true;
         it.cardImageRound = personal;
@@ -357,6 +358,7 @@ public final class PeekSource {
         it.accent = n.color != 0 ? Colors.readableOnBlack(n.color) : -1;
         it.cardImage = appIcon;
         it.cardImageIsImage = true;
+        it.appIcon = appIcon;
         it.icon = appIcon;
         it.iconIsImage = true;
         it.trailing = IslandItem.Trailing.TEXT;

@@ -25,13 +25,13 @@ final class Footprint {
         this.shapes = shapes;
     }
 
-    /** Union of the pill, the bubble and every card that overlaps the pill's row. */
+    /** Union of the pill, the handles and every card that overlaps the pill's row. */
     void coverage(RectF out) {
         shapes.main(out);
         shapes.shadePill(out, pill);
         out.union(pill);
-        if (scene.springs.split.value() > 0.2f) {
-            shapes.bubble(pill, other);
+        for (int side = -1; side <= 1; side += 2) {
+            shapes.handle(pill, side, other);
             out.union(other);
         }
         float rowTop = m.cy - (m.pillH / 2.0f);
@@ -58,7 +58,7 @@ final class Footprint {
         if (scene.sleeping) return;
         float pad = m.dp(TOUCH_PAD_DP);
         if (scene.mode == Mode.HIDDEN) {
-            if ((host.hasMinimized() || scene.iMode!=null && scene.iMode.hiddenByGesture())
+            if ((host.hasMinimized() || scene.hiddenByGesture())
                     && !scene.suppressed && scene.shadeAlpha() > 0.5f) {
                 float half = Math.max(m.dp(HIDDEN_TOUCH_HALF_WIDTH_DP), m.holeD);
                 out.op(Math.round(m.cx - half), Math.round((m.cy - (m.pillH / 2.0f)) - pad),
@@ -78,9 +78,16 @@ final class Footprint {
         if (scene.mode == Mode.COMPACT || pill.width() > m.dp(40.0f)) {
             add(out, pill, pad);
         }
-        if (scene.springs.split.value() > 0.6f && scene.mode == Mode.COMPACT) {
-            shapes.bubble(pill, other);
-            add(out, other, pad);
+        if (scene.mode == Mode.COMPACT) {
+            for (int side = -1; side <= 1; side += 2) {
+                boolean hasSideItem = m.oneDesign
+                        ? shapes.handlePresence(side) >= .3f && (scene.iMode != null || scene.compactNeighbor(side) != null)
+                        : side > 0 && scene.springs.split.value() > .6f;
+                if (hasSideItem) {
+                    shapes.handle(pill, side, other);
+                    add(out, other, pad);
+                }
+            }
         }
         for (int i = 0, n = scene.cards.size(); i < n; i++) {
             Card c = scene.cards.get(i);
