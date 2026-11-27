@@ -83,6 +83,23 @@ public class SidewaysIslandTest {
         assertEquals(0f, turner(window).getRotation(), 0f);
     }
 
+    @Test public void expandedLandscapeCardsUseScreenCoordinatesAndReturnToTheCameraEdge() {
+        IslandWindow window = window();
+        WindowManager.LayoutParams params = ReflectionHelpers.getField(window, "params");
+        for (int edge : new int[] {IslandWindow.SIDE_LEFT, IslandWindow.SIDE_RIGHT}) {
+            window.setSideways(edge);
+            window.setLandscapeCards(true);
+            assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, params.width);
+            assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, params.height);
+            assertEquals(0f, turner(window).getRotation(), 0f);
+            layout(window, SCREEN_W, SCREEN_H);
+            assertEquals(SCREEN_W, turner(window).getWidth());
+            window.setLandscapeCards(false);
+            assertEquals(EXTENT, params.width);
+            assertEquals(edge == IslandWindow.SIDE_LEFT ? -90f : 90f, turner(window).getRotation(), 0f);
+        }
+    }
+
     @Test public void theIslandsUprightCoordinatesLandOnTheWindowTurnedTowardsTheCamera() {
         IslandWindow window = window();
         window.setSideways(IslandWindow.SIDE_LEFT);

@@ -432,6 +432,17 @@ final class IMode {
         if(key.equals(selected)) { refreshCard(node); changed(); return; }
         boolean wasExpanded=scene.mode==Mode.EXPANDED;
         node.bounds(source);
+        if (!wasExpanded && !m.landscapeCards()) {
+            float dx=source.centerX()-m.cx, dy=source.centerY()-m.cy;
+            float oldW=source.width(), oldH=source.height();
+            view.prepareLandscapeCards();
+            if (m.landscapeCards()) {
+                // Map the rotated compact node into physical screen coordinates for the same morph.
+                float x=m.cx+(m.landscapeCardSide==1 ? dy : -dy);
+                float y=m.cy+(m.landscapeCardSide==1 ? -dx : dx);
+                source.set(x-oldH/2,y-oldW/2,x+oldH/2,y+oldW/2);
+            }
+        }
         float iconOnly=node.iconOnly.value();
         if(manual) {
             if(scene.peekOpen) host.onPeekClosed(director.clearPeek());
@@ -644,7 +655,7 @@ final class IMode {
     }
     private void targetExpanded(Card c) {
         float width=m.cardWidth();
-        c.targetW=width; c.targetH=c.body.h; c.targetCy=m.stackTop()+c.body.h/2;
+        c.targetW=width; c.targetH=c.body.h; c.targetCy=m.stackTop(c.body.h)+c.body.h/2;
         c.cx.animateTo(m.centredLeft(width)+width/2,.36f,.90f);
         c.cy.animateTo(c.targetCy,.42f,.88f);
         c.w.animateTo(width,.42f,.90f);
@@ -828,6 +839,17 @@ final class IMode {
     void releasePress() {
         for(Node node:nodes.values()) node.press.animateTo(1,.26f,.88f);
     }
+    /** Coordinate-space changes must not send the compact nodes flying across the display. */
+    void rebaseLandscapeRow() {
+        finishCompactInteraction();
+        for (Node n : nodes.values()) n.refresh(view, n.item);
+        layout();
+        for (Node n : nodes.values()) {
+            n.x.snapTo(n.target.centerX()); n.y.snapTo(n.target.centerY());
+            n.w.snapTo(n.target.width()); n.h.snapTo(n.target.height());
+        }
+    }
+
     void relayout() {
         finishCompactInteraction();
         for(Node n:nodes.values()) n.refresh(view,n.item);
@@ -968,7 +990,7 @@ final class IMode {
                 paint.setTextSize(m.dp(10));
                 int index=0;
                 for(int i=0;i<activities.size();i++) if(activities.get(i).key.equals(selected)) index=i;
-                canvas.drawText((index+1)+" / "+activities.size(),m.cx,
+                canvas.drawText((index+1)+" / "+activities.size(),m.landscapeCards() ? card.cx.value() : m.cx,
                         card.cy.value()+card.h.value()/2+m.dp(16),paint);
             }
         }

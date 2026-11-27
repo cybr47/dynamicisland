@@ -608,6 +608,7 @@ final class Director {
         }
         finishCompactInteraction();
         boolean wasExpanded = scene.mode == Mode.EXPANDED;
+        if (!wasExpanded) view.prepareLandscapeCards();
         if (!wasExpanded) scene.contentHandoff = new ContentHandoff(scene.contentHandoff, true, IslandView.now());
         scene.mode = Mode.EXPANDED;
         layoutCards(show);
@@ -936,6 +937,7 @@ final class Director {
         for (IslandItem it : show) {
             Card c = scene.findCard(it.key);
             CardBody body = bodies.create(it, w, false);
+            if (next.isEmpty() && m.landscapeCards()) y = m.stackTop(body.h);
             if (c != null && c.leaving && c.handoff != null && !c.handoff.expanding
                     && scene.contentHandoff != null && scene.contentHandoff.expanding) {
                 // A quick reopen retargets the same moving card instead of duplicating it at the pill.
@@ -948,8 +950,8 @@ final class Director {
                 if (created == 0 && pill.width() > m.pillH) {
                     // the first card is the pill itself pouring out, so the shapes morph instead of popping
                     c.cy.snapTo(m.cy);
-                    c.w.snapTo(pill.width());
-                    c.h.snapTo(pill.height());
+                    c.w.snapTo(m.landscapeCards() ? pill.height() : pill.width());
+                    c.h.snapTo(m.landscapeCards() ? pill.width() : pill.height());
                 } else {
                     c.cy.snapTo(m.cy + (m.pillH * IslandView.PAUSED_SPEED));
                     c.w.snapTo(m.pillH * 1.8f);

@@ -58,6 +58,7 @@ public final class IslandWindow {
     private final BlurLayer blur;
     /** {@link #SIDE_NONE}, or the edge of the screen the camera is on while the island is drawn turned there. */
     private int side = SIDE_NONE;
+    private boolean landscapeCards;
     public static final int SIDE_NONE = 0;
     public static final int SIDE_LEFT = 1;
     public static final int SIDE_RIGHT = 2;
@@ -230,6 +231,7 @@ public final class IslandWindow {
             return;
         }
         side = edge;
+        landscapeCards = false;
         turner.setSide(edge);
         blur.setSuspended(edge != SIDE_NONE);
         applyShape();
@@ -245,9 +247,27 @@ public final class IslandWindow {
         return side;
     }
 
+    /** Expanded cards use the screen's reading direction, while the compact island follows the camera. */
+    public void setLandscapeCards(boolean upright) {
+        upright = upright && side != SIDE_NONE;
+        if (landscapeCards == upright) return;
+        landscapeCards = upright;
+        turner.setSide(upright ? SIDE_NONE : side);
+        applyShape();
+        invalidateTouchRegion();
+    }
+
+    public boolean landscapeCards() {
+        return landscapeCards;
+    }
+
     private void applyShape() {
         int extent = Math.max(1, requestedHeight);
-        if (side == SIDE_NONE) {
+        if (landscapeCards) {
+            params.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            params.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            params.gravity = Gravity.TOP | Gravity.LEFT;
+        } else if (side == SIDE_NONE) {
             params.width = ViewGroup.LayoutParams.MATCH_PARENT;
             params.height = extent;
             params.gravity = Gravity.TOP | Gravity.LEFT;
@@ -275,7 +295,7 @@ public final class IslandWindow {
     /** Call when the island's shape changed; re-reads the touchable region on the next frame. */
     public void invalidateTouchRegion() {
         view.getTouchRegion(latestRegion);
-        if (side != SIDE_NONE) toWindow(latestRegion);
+        if (side != SIDE_NONE && !landscapeCards) toWindow(latestRegion);
         if (!latestRegion.equals(touchRegion)) {
             touchRegion.set(latestRegion);
             root.invalidate();

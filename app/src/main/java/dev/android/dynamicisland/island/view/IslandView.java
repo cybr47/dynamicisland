@@ -173,6 +173,7 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
     private final int[] samplingLocation = new int[2];
     private final int[] materialLocation = new int[2];
     private Runnable pillSamplingStateChanged;
+    private Runnable landscapeCardPreparation;
 
     public void setPillSamplingStateChanged(Runnable listener) {
         pillSamplingStateChanged = listener;
@@ -467,9 +468,40 @@ public final class IslandView extends View implements Choreographer.FrameCallbac
         afterMetricsChanged();
     }
 
+    public void setLandscapeCardPreparation(Runnable callback) {
+        landscapeCardPreparation = callback;
+    }
+
+    void prepareLandscapeCards() {
+        if (landscapeCardPreparation != null) landscapeCardPreparation.run();
+    }
+
+    /** Called before opening; do not collapse the scene as a normal configuration change would. */
+    public void setLandscapeCardGeometry(int screenWidth, int screenHeight, float centerX,
+            float centerY, float holeDiameter, int edge) {
+        boolean changed = metrics.landscapeCardSide != edge || metrics.landscapeScreenH != screenHeight;
+        metrics.landscapeCardSide = edge;
+        metrics.landscapeScreenH = screenHeight;
+        if (!metrics.update(screenWidth, centerX, centerY, holeDiameter, false) && !changed) return;
+        copyMetrics();
+        if (scene.iMode != null) scene.iMode.rebaseLandscapeRow();
+        invalidate();
+    }
+
+    public boolean hasCardSurfaces() {
+        return scene.mode == Mode.EXPANDED || !scene.cards.isEmpty();
+    }
+
     public void setGeometry(int screenWidth, float centerX, float centerY, float holeDiameter, boolean isTablet) {
-        if (!metrics.update(screenWidth, centerX, centerY, holeDiameter, isTablet)) {
+        boolean wasLandscapeCards = metrics.landscapeCards();
+        metrics.landscapeCardSide = 0;
+        metrics.landscapeScreenH = 0;
+        if (!metrics.update(screenWidth, centerX, centerY, holeDiameter, isTablet) && !wasLandscapeCards) {
             return;
+        }
+        if (wasLandscapeCards && scene.iMode != null && scene.mode != Mode.EXPANDED) {
+            copyMetrics();
+            scene.iMode.rebaseLandscapeRow();
         }
         afterMetricsChanged();
     }

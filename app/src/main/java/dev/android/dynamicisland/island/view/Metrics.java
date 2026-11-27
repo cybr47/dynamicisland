@@ -43,6 +43,8 @@ final class Metrics {
     float cy;
     float holeD;
     boolean tablet;
+    int landscapeCardSide;
+    int landscapeScreenH;
 
     Metrics(float density) {
         this(density, false);
@@ -176,6 +178,15 @@ final class Metrics {
         return Math.min(screenW - (cardMargin * 2.0f), cardMaxW);
     }
 
+    boolean landscapeCards() { return landscapeCardSide != 0; }
+
+    /** Keep the first card vertically centred near the camera, inside the landscape display. */
+    float stackTop(float cardHeight) {
+        if (!landscapeCards()) return stackTop();
+        return Math.max(cardMargin, Math.min(cy - cardHeight / 2f,
+                landscapeScreenH - cardMargin - cardHeight));
+    }
+
     /** Top edge of the first card. */
     float stackTop() {
         return cy + (pillH / 2.0f) + dp(8.0f);
@@ -193,6 +204,11 @@ final class Metrics {
 
     /** Left edge of a content block of width {@code w} centred under the hole but kept inside the margins. */
     float centredLeft(float w) {
+        if (landscapeCards()) {
+            float edgeGap = Math.max(cardMargin, holeD / 2f + dp(8f));
+            float left = landscapeCardSide == 1 ? cx + edgeGap : cx - edgeGap - w;
+            return Math.max(cardMargin, Math.min(left, screenW - cardMargin - w));
+        }
         float left = cx - (w / 2.0f);
         if (w < screenW) {
             left = Math.max(Math.min(left, (screenW - cardMargin) - w), cardMargin);

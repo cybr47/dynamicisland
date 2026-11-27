@@ -119,7 +119,11 @@ final class Shapes {
         float h = Math.max(0.0f, c.h.value());
         float w = Math.max(0.0f, c.w.value() * (c.iMode ? 1 : (1.0f - (CARD_SQUASH * clampUnit(c.h.velocity() / m.dp(CARD_SQUASH_SPEED_DP))))));
         float left = (c.iMode ? c.cx.value() : m.cx) - (w / 2.0f);
-        if (!c.iMode && w < m.screenW) {
+        if (!c.iMode && m.landscapeCards()) {
+            // The card moves inward as the existing size spring opens.
+            float amount = IslandView.clamp01((w - m.pillH) / Math.max(1f, c.body.w - m.pillH));
+            left = Easing.lerp(m.cx - w / 2f, m.centredLeft(w), amount);
+        } else if (!c.iMode && w < m.screenW) {
             left = Math.max(Math.min(left, (m.screenW - m.cardMargin) - w), Math.min(m.cardMargin, left));
         }
         float top = c.cy.value() - (h / 2.0f);

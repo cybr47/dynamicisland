@@ -86,6 +86,8 @@ final class IslandPlacement {
     private float centerYLandscape = -1.0f;
     /** The turned island's centre, in from the edge with the camera (its own upright y). */
     private float sidewaysCentreY;
+    private float sidewaysCentreX, sidewaysHoleD;
+    private int sidewaysWidth, sidewaysHeight;
     /** Packages whose chips the launcher animates into the island, from the last refresh. */
     private Set<String> exitPackages = new LinkedHashSet<>();
     private final RectF scratch = new RectF();
@@ -170,6 +172,7 @@ final class IslandPlacement {
         try {
             window = new IslandWindow(ctx, host, windowListener);
             view = window.view;
+            view.setLandscapeCardPreparation(this::prepareLandscapeCards);
             window.setShown(false);
             updateGeometry();
             window.attach();
@@ -418,11 +421,33 @@ final class IslandPlacement {
         view.setHoleTextPadding(ModuleSettings.holeTextPaddingDp());
         // Geometry updates can request a window resize synchronously; publish the new edge centre first.
         sidewaysCentreY = centre[1];
-        view.setGeometry(height, centre[0], centre[1], holeD, false);
+        sidewaysCentreX = centre[0];
+        sidewaysHoleD = holeD;
+        sidewaysWidth = width;
+        sidewaysHeight = height;
+        if (window.landscapeCards()) {
+            applyLandscapeCardGeometry();
+        } else {
+            view.setGeometry(height, centre[0], centre[1], holeD, false);
+        }
         view.setHoleMarker(-1.0f, 0.0f, 0.0f);
         applyWindowHeight();
         updateSuppression();
         return true;
+    }
+
+    /** Switch coordinate spaces before the animator creates its first expanded card. */
+    private void prepareLandscapeCards() {
+        if (!ready() || window.sideways() == IslandWindow.SIDE_NONE || window.landscapeCards()) return;
+        window.setLandscapeCards(true);
+        applyLandscapeCardGeometry();
+    }
+
+    private void applyLandscapeCardGeometry() {
+        int edge = window.sideways();
+        float x = edge == IslandWindow.SIDE_LEFT ? sidewaysCentreY : sidewaysWidth - sidewaysCentreY;
+        float y = edge == IslandWindow.SIDE_LEFT ? sidewaysHeight - sidewaysCentreX : sidewaysCentreX;
+        view.setLandscapeCardGeometry(sidewaysWidth, sidewaysHeight, x, y, sidewaysHoleD, edge);
     }
 
     /** The island's centre in its own upright coordinates: x along the edge the camera is on, y in from that edge. */
@@ -554,6 +579,12 @@ final class IslandPlacement {
 
     private void syncFrame() {
         if (!ready()) {
+            return;
+        }
+        // Keep the expanded coordinate space through the whole closing animation.
+        if (window.landscapeCards() && !view.hasCardSurfaces()) {
+            window.setLandscapeCards(false);
+            updateGeometry();
             return;
         }
         window.invalidateTouchRegion();
